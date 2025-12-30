@@ -1,0 +1,1221 @@
+import tkinter as tk
+from tkinter import messagebox, ttk
+import random
+import copy
+from PIL import Image, ImageDraw, ImageFont, ImageTk
+
+
+class Card:
+    """Represents a playing card"""
+    SUITS = ['♠', '♥', '♦', '♣']
+    RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K']
+    VALUES = {'A': 11, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 10, 'Q': 10, 'K': 10}
+
+    def __init__(self, suit, rank):
+        self.suit = suit
+        self.rank = rank
+        self.value = self.VALUES[rank]
+
+    def __str__(self):
+        return f"{self.rank}{self.suit}"
+
+    def copy(self):
+        return Card(self.suit, self.rank)
+
+
+class Deck:
+    """Represents a deck of 52 cards"""
+    def __init__(self):
+        self.cards = []
+        self.build()
+
+    def build(self):
+        """Build a standard 52-card deck"""
+        self.cards = [Card(suit, rank) for suit in Card.SUITS for rank in Card.RANKS]
+        self.shuffle()
+
+    def shuffle(self):
+        """Shuffle the deck"""
+        random.shuffle(self.cards)
+
+    def deal(self):
+        """Deal a card from the deck"""
+        if len(self.cards) == 0:
+            self.build()
+        return self.cards.pop()
+
+    def copy(self):
+        """Create a deep copy of the deck"""
+        new_deck = Deck.__new__(Deck)
+        new_deck.cards = [card.copy() for card in self.cards]
+        return new_deck
+
+
+class Hand:
+    """Represents a hand of cards"""
+    def __init__(self):
+        self.cards = []
+        self.value = 0
+        self.aces = 0
+
+    def add_card(self, card):
+        """Add a card to the hand"""
+        self.cards.append(card)
+        self.value += card.value
+        if card.rank == 'A':
+            self.aces += 1
+        self.adjust_for_ace()
+
+    def adjust_for_ace(self):
+        """Adjust value if there are aces and total is over 21"""
+        while self.value > 21 and self.aces:
+            self.value -= 10
+            self.aces -= 1
+
+    def is_blackjack(self):
+        """Check if hand is a blackjack (21 with 2 cards)"""
+        return len(self.cards) == 2 and self.value == 21
+
+    def is_busted(self):
+        """Check if hand is busted (over 21)"""
+        return self.value > 21
+
+    def can_split(self):
+        """Check if hand can be split (two cards of same rank)"""
+        return len(self.cards) == 2 and self.cards[0].rank == self.cards[1].rank
+
+    def copy(self):
+        """Create a deep copy of the hand"""
+        new_hand = Hand()
+        new_hand.cards = [card.copy() for card in self.cards]
+        new_hand.value = self.value
+        new_hand.aces = self.aces
+        return new_hand
+
+    def __str__(self):
+        return ' '.join(str(card) for card in self.cards)
+
+
+class MonteCarloSimulator:
+    """Simulates blackjack outcomes using Monte Carlo method"""
+
+    def __init__(self, num_simulations=10000):
+        self.num_simulations = num_simulations
+
+    def create_fresh_deck(self, known_cards):
+        """Create a deck with known cards removed"""
+        # Start with all 52 cards
+        all_cards = [Card(suit, rank) for suit in Card.SUITS for rank in Card.RANKS]
+
+        # Remove known cards
+        for known_card in known_cards:
+            for i, card in enumerate(all_cards):
+                if card.suit == known_card.suit and card.rank == known_card.rank:
+                    all_cards.pop(i)
+                    break
+
+        # Shuffle
+        random.shuffle(all_cards)
+
+        # Create deck object
+        deck = Deck.__new__(Deck)
+        deck.cards = all_cards
+        return deck
+
+    def simulate_dealer(self, dealer_hand, deck):
+        """Simulate dealer's turn following standard rules"""
+        dealer_hand = dealer_hand.copy()
+        deck = deck.copy()
+
+        while dealer_hand.value < 17:
+            dealer_hand.add_card(deck.deal())
+
+        return dealer_hand
+
+    def basic_strategy_decision(self, player_hand, dealer_upcard_value):
+        """Simple basic strategy for continued play after hit"""
+        player_value = player_hand.value
+
+        # Hard totals
+        if player_hand.aces == 0:
+            if player_value >= 17:
+                return "STAND"
+            elif player_value >= 13 and dealer_upcard_value <= 6:
+                return "STAND"
+            elif player_value == 12 and 4 <= dealer_upcard_value <= 6:
+                return "STAND"
+            else:
+                return "HIT"
+        # Soft totals
+        else:
+            if player_value >= 19:
+                return "STAND"
+            elif player_value == 18 and dealer_upcard_value <= 8:
+                return "STAND"
+            else:
+                return "HIT"
+
+    def play_hand_optimally(self, player_hand, dealer_upcard_value, deck):
+        """Play out a hand using basic strategy"""
+        player_hand = player_hand.copy()
+        deck = deck.copy()
+
+        while True:
+            decision = self.basic_strategy_decision(player_hand, dealer_upcard_value)
+
+            if decision == "STAND" or player_hand.is_busted():
+                break
+            elif decision == "HIT":
+                player_hand.add_card(deck.deal())
+
+        return player_hand
+
+    def simulate_hit(self, player_hand, dealer_upcard, deck, bet):
+        """Simulate outcome after hitting"""
+        player_hand = player_hand.copy()
+        deck = deck.copy()
+
+        player_hand.add_card(deck.deal())
+
+        if player_hand.is_busted():
+            return -bet
+
+        # Continue with basic strategy
+        dealer_upcard_value = dealer_upcard.cards[0].value
+        player_hand = self.play_hand_optimally(player_hand, dealer_upcard_value, deck)
+
+        if player_hand.is_busted():
+            return -bet
+
+        # Complete dealer hand (add hidden card + play)
+        dealer_hand = dealer_upcard.copy()
+        dealer_hand.add_card(deck.deal())  # Hidden card
+        dealer_final = self.simulate_dealer(dealer_hand, deck)
+
+        return self.calculate_outcome(player_hand, dealer_final, bet)
+
+    def simulate_stand(self, player_hand, dealer_upcard, deck, bet):
+        """Simulate outcome after standing"""
+        # Complete dealer hand (add hidden card + play)
+        dealer_hand = dealer_upcard.copy()
+        deck = deck.copy()
+        dealer_hand.add_card(deck.deal())  # Hidden card
+        dealer_final = self.simulate_dealer(dealer_hand, deck)
+
+        return self.calculate_outcome(player_hand, dealer_final, bet)
+
+    def simulate_double(self, player_hand, dealer_upcard, deck, bet):
+        """Simulate outcome after doubling down"""
+        player_hand = player_hand.copy()
+        deck = deck.copy()
+
+        player_hand.add_card(deck.deal())
+
+        if player_hand.is_busted():
+            return -bet * 2
+
+        # Complete dealer hand
+        dealer_hand = dealer_upcard.copy()
+        dealer_hand.add_card(deck.deal())  # Hidden card
+        dealer_final = self.simulate_dealer(dealer_hand, deck)
+
+        return self.calculate_outcome(player_hand, dealer_final, bet * 2)
+
+    def simulate_split(self, player_hand, dealer_upcard, deck, bet):
+        """Simulate outcome after splitting"""
+        deck = deck.copy()
+        dealer_upcard_value = dealer_upcard.cards[0].value
+
+        hand1 = Hand()
+        hand2 = Hand()
+
+        hand1.add_card(player_hand.cards[0].copy())
+        hand2.add_card(player_hand.cards[1].copy())
+
+        hand1.add_card(deck.deal())
+        hand2.add_card(deck.deal())
+
+        # Play out both hands with basic strategy
+        hand1 = self.play_hand_optimally(hand1, dealer_upcard_value, deck)
+        hand2 = self.play_hand_optimally(hand2, dealer_upcard_value, deck)
+
+        # Complete dealer hand
+        dealer_hand = dealer_upcard.copy()
+        dealer_hand.add_card(deck.deal())  # Hidden card
+        dealer_final = self.simulate_dealer(dealer_hand, deck)
+
+        # Calculate outcomes for both hands
+        outcome1 = self.calculate_outcome(hand1, dealer_final, bet) if not hand1.is_busted() else -bet
+        outcome2 = self.calculate_outcome(hand2, dealer_final, bet) if not hand2.is_busted() else -bet
+
+        return outcome1 + outcome2
+
+    def calculate_outcome(self, player_hand, dealer_hand, bet):
+        """Calculate the outcome of a hand"""
+        if player_hand.is_busted():
+            return -bet
+        elif dealer_hand.is_busted():
+            return bet
+        elif player_hand.value > dealer_hand.value:
+            return bet
+        elif player_hand.value < dealer_hand.value:
+            return -bet
+        else:
+            return 0  # Push
+
+    def calculate_expected_value(self, action, player_hand, dealer_upcard, known_cards, bet):
+        """Calculate expected value for a specific action"""
+        total = 0
+
+        for _ in range(self.num_simulations):
+            # Create fresh deck for each simulation
+            deck = self.create_fresh_deck(known_cards)
+
+            if action == "HIT":
+                outcome = self.simulate_hit(player_hand, dealer_upcard, deck, bet)
+            elif action == "STAND":
+                outcome = self.simulate_stand(player_hand, dealer_upcard, deck, bet)
+            elif action == "DOUBLE":
+                outcome = self.simulate_double(player_hand, dealer_upcard, deck, bet)
+            elif action == "SPLIT":
+                outcome = self.simulate_split(player_hand, dealer_upcard, deck, bet)
+            else:
+                outcome = 0
+
+            total += outcome
+
+        return total / self.num_simulations
+
+
+class BlackjackMonteCarloGUI:
+    """Blackjack game with Monte Carlo simulation for expected value"""
+
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Blackjack - Monte Carlo Simulator")
+        self.root.geometry("1400x850")
+        self.root.configure(bg='#0B6623')
+        self.root.resizable(True, True)
+
+        # Game state
+        self.deck = Deck()
+        self.dealer_hand = Hand()
+        self.player_hands = [Hand()]
+        self.current_hand_index = 0
+        self.chips = 1000
+        self.current_bet = 0
+        self.game_in_progress = False
+        self.dealer_hidden = True
+        self.stand_count = 0
+        self.has_split = False
+
+        # Simulation settings
+        self.num_simulations = 10000
+        self.simulator = MonteCarloSimulator(self.num_simulations)
+        self.show_ev = tk.BooleanVar(value=True)
+
+        # Hand category filters
+        self.filter_pairs = tk.BooleanVar(value=False)
+        self.filter_ace = tk.BooleanVar(value=False)
+        self.filter_soft = tk.BooleanVar(value=False)
+        self.filter_hard = tk.BooleanVar(value=False)
+
+        # Dealer upcard filter
+        self.filter_dealer_upcard = tk.BooleanVar(value=False)
+        self.dealer_upcard_value = tk.StringVar(value="Any")
+
+        # Player upcard filter
+        self.filter_player_upcard = tk.BooleanVar(value=False)
+        self.player_upcard_value = tk.StringVar(value="Any")
+
+        # Card image cache
+        self.card_images = {}
+
+        self.setup_gui()
+
+    def create_card_image(self, card, hidden=False):
+        """Create a card image using PIL"""
+        width, height = 80, 120
+
+        # Create card background
+        img = Image.new('RGB', (width, height), 'white')
+        draw = ImageDraw.Draw(img)
+
+        if hidden:
+            # Draw card back
+            img = Image.new('RGB', (width, height), '#0000AA')
+            draw = ImageDraw.Draw(img)
+            draw.rectangle([5, 5, width-5, height-5], outline='white', width=3)
+            draw.rectangle([10, 10, width-10, height-10], outline='white', width=2)
+        else:
+            # Draw card border
+            draw.rectangle([0, 0, width-1, height-1], outline='black', width=2)
+
+            # Set color based on suit
+            color = 'red' if card.suit in ['♥', '♦'] else 'black'
+
+            # Draw rank in top-left
+            try:
+                font = ImageFont.truetype("arial.ttf", 24)
+                small_font = ImageFont.truetype("arial.ttf", 32)
+            except:
+                font = ImageFont.load_default()
+                small_font = ImageFont.load_default()
+
+            # Top left
+            draw.text((8, 5), card.rank, fill=color, font=font)
+            draw.text((8, 30), card.suit, fill=color, font=font)
+
+            # Center
+            draw.text((width//2 - 15, height//2 - 20), card.suit, fill=color, font=small_font)
+
+            # Bottom right (upside down)
+            draw.text((width - 25, height - 35), card.rank, fill=color, font=font)
+            draw.text((width - 25, height - 60), card.suit, fill=color, font=font)
+
+        return ImageTk.PhotoImage(img)
+
+    def setup_gui(self):
+        """Setup the GUI elements"""
+        # Main container
+        main_frame = tk.Frame(self.root, bg='#0B6623')
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Left side - Card Analysis
+        left_stats_frame = tk.Frame(main_frame, bg='#2e4d1a', relief=tk.RIDGE, bd=3)
+        left_stats_frame.pack(side=tk.LEFT, fill=tk.BOTH, padx=(0, 10))
+
+        # Center - Game
+        game_frame = tk.Frame(main_frame, bg='#0B6623')
+        game_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Right side - Monte Carlo Stats
+        stats_frame = tk.Frame(main_frame, bg='#1a4d2e', relief=tk.RIDGE, bd=3)
+        stats_frame.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(10, 0))
+
+        # Title
+        title_label = tk.Label(game_frame, text="BLACKJACK - Monte Carlo", font=('Arial', 28, 'bold'),
+                               bg='#0B6623', fg='white')
+        title_label.pack(pady=10)
+
+        # Dealer section
+        dealer_frame = tk.Frame(game_frame, bg='#0B6623')
+        dealer_frame.pack(pady=5)
+
+        tk.Label(dealer_frame, text="Dealer's Hand", font=('Arial', 16, 'bold'),
+                bg='#0B6623', fg='white').pack()
+
+        # Canvas for dealer cards
+        self.dealer_canvas = tk.Canvas(dealer_frame, width=600, height=140,
+                                       bg='#0B6623', highlightthickness=0)
+        self.dealer_canvas.pack(pady=5)
+
+        self.dealer_value_label = tk.Label(dealer_frame, text="Value: 0", font=('Arial', 14),
+                                          bg='#0B6623', fg='white')
+        self.dealer_value_label.pack()
+
+        # Player section
+        player_frame = tk.Frame(game_frame, bg='#0B6623')
+        player_frame.pack(pady=5)
+
+        tk.Label(player_frame, text="Your Hand", font=('Arial', 16, 'bold'),
+                bg='#0B6623', fg='white').pack()
+
+        # Canvas for player cards
+        self.player_canvas = tk.Canvas(player_frame, width=600, height=160,
+                                       bg='#0B6623', highlightthickness=0)
+        self.player_canvas.pack(pady=5)
+
+        self.player_value_label = tk.Label(player_frame, text="Value: 0", font=('Arial', 14),
+                                          bg='#0B6623', fg='white')
+        self.player_value_label.pack()
+
+        # Status message
+        self.status_label = tk.Label(game_frame, text="Place your bet to start!",
+                                    font=('Arial', 14, 'bold'), bg='#0B6623', fg='yellow')
+        self.status_label.pack(pady=10)
+
+        # Game action buttons
+        buttons_frame = tk.Frame(game_frame, bg='#0B6623')
+        buttons_frame.pack(pady=20)
+
+        self.deal_button = tk.Button(buttons_frame, text="Deal", font=('Arial', 14, 'bold'),
+                                     command=self.deal_cards, width=10, bg='green', fg='white')
+        self.deal_button.pack(side=tk.LEFT, padx=5)
+
+        self.hit_button = tk.Button(buttons_frame, text="Hit", font=('Arial', 14, 'bold'),
+                                    command=self.hit, width=10, state=tk.DISABLED)
+        self.hit_button.pack(side=tk.LEFT, padx=5)
+
+        self.stand_button = tk.Button(buttons_frame, text="Stand", font=('Arial', 14, 'bold'),
+                                      command=self.stand, width=10, state=tk.DISABLED)
+        self.stand_button.pack(side=tk.LEFT, padx=5)
+
+        self.double_button = tk.Button(buttons_frame, text="Double Down", font=('Arial', 14, 'bold'),
+                                       command=self.double_down, width=12, state=tk.DISABLED)
+        self.double_button.pack(side=tk.LEFT, padx=5)
+
+        self.split_button = tk.Button(buttons_frame, text="Split", font=('Arial', 14, 'bold'),
+                                      command=self.split, width=10, state=tk.DISABLED)
+        self.split_button.pack(side=tk.LEFT, padx=5)
+
+        # Monte Carlo Stats Panel
+        tk.Label(stats_frame, text="Monte Carlo Analysis", font=('Arial', 18, 'bold'),
+                bg='#1a4d2e', fg='white').pack(pady=10)
+
+        # Chips and betting section
+        bet_section = tk.Frame(stats_frame, bg='#1a4d2e')
+        bet_section.pack(pady=10, padx=10, fill=tk.X)
+
+        self.chips_label = tk.Label(bet_section, text=f"Chips: ${self.chips}",
+                                    font=('Arial', 13, 'bold'), bg='#1a4d2e', fg='gold')
+        self.chips_label.pack(pady=5)
+
+        tk.Label(bet_section, text="Bet Amount:", font=('Arial', 11, 'bold'),
+                bg='#1a4d2e', fg='white').pack(pady=(5, 2))
+
+        self.bet_entry = tk.Entry(bet_section, font=('Arial', 11), width=15, justify='center')
+        self.bet_entry.insert(0, "10")
+        self.bet_entry.pack(pady=5)
+
+        # Betting buttons
+        bet_buttons_frame = tk.Frame(bet_section, bg='#1a4d2e')
+        bet_buttons_frame.pack(pady=5)
+
+        bet_amounts = [10, 25, 50, 100]
+        for i, amount in enumerate(bet_amounts):
+            btn = tk.Button(bet_buttons_frame, text=f"${amount}", font=('Arial', 8),
+                          command=lambda a=amount: self.quick_bet(a), width=4)
+            btn.pack(side=tk.LEFT, padx=2)
+
+        # Simulation settings
+        settings_frame = tk.Frame(stats_frame, bg='#1a4d2e')
+        settings_frame.pack(pady=5, padx=10, fill=tk.X)
+
+        sim_row = tk.Frame(settings_frame, bg='#1a4d2e')
+        sim_row.pack(fill=tk.X)
+
+        tk.Label(sim_row, text="Sims:", font=('Arial', 10, 'bold'),
+                bg='#1a4d2e', fg='white').pack(side=tk.LEFT, padx=(0, 5))
+
+        sim_values = [1000, 5000, 10000, 50000]
+        self.sim_var = tk.IntVar(value=10000)
+        sim_dropdown = ttk.Combobox(sim_row, textvariable=self.sim_var,
+                                   values=sim_values, state='readonly', width=10)
+        sim_dropdown.pack(side=tk.LEFT)
+        sim_dropdown.bind('<<ComboboxSelected>>', self.update_simulations)
+
+        tk.Checkbutton(settings_frame, text="Show EV", variable=self.show_ev,
+                      font=('Arial', 9), bg='#1a4d2e', fg='white',
+                      selectcolor='#0B6623', command=self.update_ev_display).pack(pady=3)
+
+        # Hand category filters
+        tk.Label(settings_frame, text="Hand Filters:", font=('Arial', 10, 'bold'),
+                bg='#1a4d2e', fg='white').pack(pady=(5, 2))
+
+        hand_filter_row = tk.Frame(settings_frame, bg='#1a4d2e')
+        hand_filter_row.pack(pady=3)
+
+        tk.Checkbutton(hand_filter_row, text="Pairs", variable=self.filter_pairs,
+                      font=('Arial', 8), bg='#1a4d2e', fg='white',
+                      selectcolor='#0B6623').pack(side=tk.LEFT, padx=2)
+
+        tk.Checkbutton(hand_filter_row, text="Ace", variable=self.filter_ace,
+                      font=('Arial', 8), bg='#1a4d2e', fg='white',
+                      selectcolor='#0B6623').pack(side=tk.LEFT, padx=2)
+
+        tk.Checkbutton(hand_filter_row, text="Soft", variable=self.filter_soft,
+                      font=('Arial', 8), bg='#1a4d2e', fg='white',
+                      selectcolor='#0B6623').pack(side=tk.LEFT, padx=2)
+
+        tk.Checkbutton(hand_filter_row, text="Hard", variable=self.filter_hard,
+                      font=('Arial', 8), bg='#1a4d2e', fg='white',
+                      selectcolor='#0B6623').pack(side=tk.LEFT, padx=2)
+
+        # Dealer upcard filter
+        tk.Label(settings_frame, text="Dealer Upcard:", font=('Arial', 11, 'bold'),
+                bg='#1a4d2e', fg='white').pack(pady=(10, 5))
+
+        tk.Checkbutton(settings_frame, text="Specify Dealer Upcard", variable=self.filter_dealer_upcard,
+                      font=('Arial', 9), bg='#1a4d2e', fg='white',
+                      selectcolor='#0B6623', anchor='w').pack(fill=tk.X, padx=10)
+
+        dealer_upcard_values = ['Any', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K']
+        dealer_dropdown = ttk.Combobox(settings_frame, textvariable=self.dealer_upcard_value,
+                                      values=dealer_upcard_values, state='readonly', width=12)
+        dealer_dropdown.pack(pady=5)
+
+        # Player upcard filter
+        tk.Label(settings_frame, text="Player First Card:", font=('Arial', 11, 'bold'),
+                bg='#1a4d2e', fg='white').pack(pady=(10, 5))
+
+        tk.Checkbutton(settings_frame, text="Specify Player First Card", variable=self.filter_player_upcard,
+                      font=('Arial', 9), bg='#1a4d2e', fg='white',
+                      selectcolor='#0B6623', anchor='w').pack(fill=tk.X, padx=10)
+
+        player_upcard_values = ['Any', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K']
+        player_dropdown = ttk.Combobox(settings_frame, textvariable=self.player_upcard_value,
+                                      values=player_upcard_values, state='readonly', width=12)
+        player_dropdown.pack(pady=5)
+
+        # Expected Value Display
+        ev_frame = tk.Frame(stats_frame, bg='#1a4d2e')
+        ev_frame.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
+
+        tk.Label(ev_frame, text="Expected Value ($)", font=('Arial', 13, 'bold'),
+                bg='#1a4d2e', fg='white').pack(pady=5)
+
+        # EV for each action
+        self.ev_labels = {}
+        actions = ['HIT', 'STAND', 'DOUBLE', 'SPLIT']
+        colors = {'HIT': '#4CAF50', 'STAND': '#2196F3', 'DOUBLE': '#FF9800', 'SPLIT': '#9C27B0'}
+
+        for action in actions:
+            action_frame = tk.Frame(ev_frame, bg='#1a4d2e')
+            action_frame.pack(fill=tk.X, pady=5)
+
+            tk.Label(action_frame, text=f"{action}:", font=('Arial', 12, 'bold'),
+                    bg='#1a4d2e', fg=colors[action], width=10, anchor='w').pack(side=tk.LEFT)
+
+            label = tk.Label(action_frame, text="N/A", font=('Arial', 12),
+                           bg='#1a4d2e', fg='white', width=12, anchor='e')
+            label.pack(side=tk.RIGHT)
+            self.ev_labels[action] = label
+
+        # Best action recommendation
+        self.best_action_label = tk.Label(stats_frame, text="", font=('Arial', 14, 'bold'),
+                                         bg='#1a4d2e', fg='yellow', wraplength=250)
+        self.best_action_label.pack(pady=15)
+
+        # Calculate EV button
+        self.calc_ev_button = tk.Button(stats_frame, text="Calculate EV", font=('Arial', 12, 'bold'),
+                                       command=self.calculate_all_ev, bg='#FF5722', fg='white',
+                                       width=20, state=tk.DISABLED)
+        self.calc_ev_button.pack(pady=10)
+
+        # Left sidebar - Card Analysis
+        tk.Label(left_stats_frame, text="Card Analysis", font=('Arial', 18, 'bold'),
+                bg='#2e4d1a', fg='white').pack(pady=10)
+
+        # Card counting section
+        card_count_frame = tk.Frame(left_stats_frame, bg='#2e4d1a')
+        card_count_frame.pack(pady=10, padx=10, fill=tk.X)
+
+        tk.Label(card_count_frame, text="Remaining Cards", font=('Arial', 11, 'bold'),
+                bg='#2e4d1a', fg='white').pack(pady=5)
+
+        self.player_bust_label = tk.Label(card_count_frame, text="Player Bust: N/A",
+                                          font=('Arial', 10, 'bold'), bg='#2e4d1a', fg='#FF5252')
+        self.player_bust_label.pack(pady=3, anchor='w', padx=10)
+
+        self.bust_ranks_label = tk.Label(card_count_frame, text="",
+                                         font=('Arial', 9), bg='#2e4d1a', fg='#FF9999', justify=tk.LEFT)
+        self.bust_ranks_label.pack(pady=2, anchor='w', padx=15)
+
+        self.player_safe_label = tk.Label(card_count_frame, text="Player Safe: N/A",
+                                          font=('Arial', 10, 'bold'), bg='#2e4d1a', fg='#4CAF50')
+        self.player_safe_label.pack(pady=3, anchor='w', padx=10)
+
+        self.safe_ranks_label = tk.Label(card_count_frame, text="",
+                                         font=('Arial', 9), bg='#2e4d1a', fg='#90EE90', justify=tk.LEFT)
+        self.safe_ranks_label.pack(pady=2, anchor='w', padx=15)
+
+    def calculate_card_counts(self):
+        """Calculate how many cards will bust vs help player"""
+        if not self.game_in_progress:
+            return
+
+        current_hand = self.player_hands[self.current_hand_index]
+        player_value = current_hand.value
+        player_has_usable_ace = current_hand.aces > 0
+
+        # Count remaining cards in deck by rank
+        player_bust_count = 0
+        player_safe_count = 0
+        bust_ranks = {}  # rank -> count
+        safe_ranks = {}  # rank -> count
+
+        for card in self.deck.cards:
+            # Player analysis - account for soft hands
+            will_bust = False
+
+            # Aces count as 1 (minimum value)
+            if card.rank == 'A':
+                # Even counting as 1, check if it busts
+                if player_value + 1 > 21:
+                    will_bust = True
+                else:
+                    will_bust = False
+            else:
+                new_value = player_value + card.value
+
+                if new_value > 21:
+                    # Check if we have a usable ace that can save us
+                    if player_has_usable_ace:
+                        # Ace can be counted as 1 instead of 11 (subtract 10)
+                        adjusted_value = new_value - 10
+                        if adjusted_value > 21:
+                            will_bust = True
+                    else:
+                        will_bust = True
+
+            if will_bust:
+                player_bust_count += 1
+                bust_ranks[card.rank] = bust_ranks.get(card.rank, 0) + 1
+            else:
+                player_safe_count += 1
+                safe_ranks[card.rank] = safe_ranks.get(card.rank, 0) + 1
+
+        total_cards = len(self.deck.cards)
+
+        # Update summary labels
+        self.player_bust_label.config(
+            text=f"Player Bust: {player_bust_count}/{total_cards} ({player_bust_count/total_cards*100:.1f}%)")
+        self.player_safe_label.config(
+            text=f"Player Safe: {player_safe_count}/{total_cards} ({player_safe_count/total_cards*100:.1f}%)")
+
+        # Build rank breakdown strings
+        rank_order = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K']
+
+        bust_text = ""
+        for rank in rank_order:
+            if rank in bust_ranks:
+                bust_text += f"{rank}: {bust_ranks[rank]}  "
+
+        safe_text = ""
+        for rank in rank_order:
+            if rank in safe_ranks:
+                safe_text += f"{rank}: {safe_ranks[rank]}  "
+
+        self.bust_ranks_label.config(text=bust_text.strip() if bust_text else "None")
+        self.safe_ranks_label.config(text=safe_text.strip() if safe_text else "None")
+
+    def update_simulations(self, event=None):
+        """Update number of simulations"""
+        self.num_simulations = self.sim_var.get()
+        self.simulator.num_simulations = self.num_simulations
+
+    def update_ev_display(self):
+        """Toggle EV display"""
+        if not self.show_ev.get():
+            for label in self.ev_labels.values():
+                label.config(text="N/A")
+            self.best_action_label.config(text="")
+
+    def quick_bet(self, amount):
+        """Quick bet button handler"""
+        if not self.game_in_progress:
+            self.bet_entry.delete(0, tk.END)
+            self.bet_entry.insert(0, str(amount))
+
+    def check_hand_category(self, hand):
+        """Check if hand matches selected filters"""
+        # If no filters selected, allow all hands
+        if not any([self.filter_pairs.get(), self.filter_ace.get(),
+                   self.filter_soft.get(), self.filter_hard.get()]):
+            return True
+
+        matches = True
+
+        # Check pair filter
+        if self.filter_pairs.get():
+            if not (len(hand.cards) == 2 and hand.cards[0].rank == hand.cards[1].rank):
+                matches = False
+
+        # Check ace filter
+        if self.filter_ace.get():
+            has_ace = any(card.rank == 'A' for card in hand.cards)
+            if not has_ace:
+                matches = False
+
+        # Check soft hand filter (has ace counted as 11)
+        if self.filter_soft.get():
+            if hand.aces == 0:  # No usable ace
+                matches = False
+
+        # Check hard hand filter (no ace or ace counted as 1)
+        if self.filter_hard.get():
+            if hand.aces > 0:  # Has usable ace
+                matches = False
+
+        return matches
+
+    def calculate_all_ev(self):
+        """Calculate expected value for all possible actions"""
+        if not self.game_in_progress or not self.show_ev.get():
+            return
+
+        self.calc_ev_button.config(state=tk.DISABLED, text="Calculating...")
+        self.root.update()
+
+        current_hand = self.player_hands[self.current_hand_index]
+
+        # Create a dealer hand with only visible card
+        visible_dealer_hand = Hand()
+        visible_dealer_hand.add_card(self.dealer_hand.cards[0].copy())
+
+        # Gather all known cards (player's cards + dealer's visible card)
+        known_cards = []
+        for hand in self.player_hands:
+            known_cards.extend(hand.cards)
+        known_cards.append(self.dealer_hand.cards[0])
+
+        ev_results = {}
+
+        # Calculate EV for Hit
+        ev_hit = self.simulator.calculate_expected_value(
+            "HIT", current_hand, visible_dealer_hand, known_cards, self.current_bet)
+        ev_results['HIT'] = ev_hit
+        self.ev_labels['HIT'].config(text=f"${ev_hit:.2f}")
+
+        # Calculate EV for Stand
+        ev_stand = self.simulator.calculate_expected_value(
+            "STAND", current_hand, visible_dealer_hand, known_cards, self.current_bet)
+        ev_results['STAND'] = ev_stand
+        self.ev_labels['STAND'].config(text=f"${ev_stand:.2f}")
+
+        # Calculate EV for Double Down if possible
+        if self.chips >= self.current_bet and len(current_hand.cards) == 2:
+            ev_double = self.simulator.calculate_expected_value(
+                "DOUBLE", current_hand, visible_dealer_hand, known_cards, self.current_bet)
+            ev_results['DOUBLE'] = ev_double
+            self.ev_labels['DOUBLE'].config(text=f"${ev_double:.2f}")
+        else:
+            self.ev_labels['DOUBLE'].config(text="N/A")
+
+        # Calculate EV for Split if possible
+        if current_hand.can_split() and self.chips >= self.current_bet:
+            ev_split = self.simulator.calculate_expected_value(
+                "SPLIT", current_hand, visible_dealer_hand, known_cards, self.current_bet)
+            ev_results['SPLIT'] = ev_split
+            self.ev_labels['SPLIT'].config(text=f"${ev_split:.2f}")
+        else:
+            self.ev_labels['SPLIT'].config(text="N/A")
+
+        # Find best action
+        valid_actions = {k: v for k, v in ev_results.items() if k in self.ev_labels and self.ev_labels[k].cget('text') != "N/A"}
+        if valid_actions:
+            best_action = max(valid_actions, key=valid_actions.get)
+            best_ev = valid_actions[best_action]
+            self.best_action_label.config(
+                text=f"Best Action:\n{best_action}\n(EV: ${best_ev:.2f})")
+
+        self.calc_ev_button.config(state=tk.NORMAL, text="Calculate EV")
+
+        # Update card counts
+        self.calculate_card_counts()
+
+    def deal_cards(self):
+        """Deal initial cards to player and dealer"""
+        try:
+            bet = int(self.bet_entry.get())
+            if bet <= 0:
+                messagebox.showerror("Invalid Bet", "Bet must be greater than 0!")
+                return
+            if bet > self.chips:
+                messagebox.showerror("Insufficient Chips", f"You only have ${self.chips}!")
+                return
+        except ValueError:
+            messagebox.showerror("Invalid Bet", "Please enter a valid bet amount!")
+            return
+
+        self.current_bet = bet
+        self.chips -= bet
+
+        # Reset game state
+        self.deck = Deck()
+        self.dealer_hand = Hand()
+        self.player_hands = [Hand()]
+        self.current_hand_index = 0
+        self.game_in_progress = True
+        self.dealer_hidden = True
+        self.stand_count = 0
+        self.has_split = False
+
+        # Reset EV labels
+        for label in self.ev_labels.values():
+            label.config(text="N/A")
+        self.best_action_label.config(text="")
+
+        # Deal cards with filter applied
+        max_attempts = 1000
+        attempts = 0
+
+        while attempts < max_attempts:
+            # Reset hands
+            self.dealer_hand = Hand()
+            self.player_hands = [Hand()]
+
+            # Deal player first card (with filter if enabled)
+            if self.filter_player_upcard.get() and self.player_upcard_value.get() != "Any":
+                # Find a card matching the specified rank
+                target_rank = self.player_upcard_value.get()
+                player_card = None
+                for card in self.deck.cards:
+                    if card.rank == target_rank:
+                        player_card = card
+                        self.deck.cards.remove(card)
+                        break
+
+                if player_card:
+                    self.player_hands[0].add_card(player_card)
+                else:
+                    # No matching card found, reshuffle and try again
+                    self.deck.shuffle()
+                    attempts += 1
+                    continue
+            else:
+                self.player_hands[0].add_card(self.deck.deal())
+
+            # Deal dealer upcard (with filter if enabled)
+            if self.filter_dealer_upcard.get() and self.dealer_upcard_value.get() != "Any":
+                # Find a card matching the specified rank
+                target_rank = self.dealer_upcard_value.get()
+                dealer_card = None
+                for card in self.deck.cards:
+                    if card.rank == target_rank:
+                        dealer_card = card
+                        self.deck.cards.remove(card)
+                        break
+
+                if dealer_card:
+                    self.dealer_hand.add_card(dealer_card)
+                else:
+                    # No matching card found, reshuffle and try again
+                    self.deck.cards.extend(self.player_hands[0].cards)
+                    self.deck.shuffle()
+                    attempts += 1
+                    continue
+            else:
+                self.dealer_hand.add_card(self.deck.deal())
+
+            self.player_hands[0].add_card(self.deck.deal())
+            self.dealer_hand.add_card(self.deck.deal())
+
+            # Check if hand matches filter
+            if self.check_hand_category(self.player_hands[0]):
+                break
+
+            # Return cards to deck and reshuffle
+            self.deck.cards.extend(self.player_hands[0].cards)
+            self.deck.cards.extend(self.dealer_hand.cards)
+            self.deck.shuffle()
+
+            attempts += 1
+
+        if attempts >= max_attempts:
+            messagebox.showwarning("Filter Too Restrictive",
+                                 "Could not deal a hand matching the selected filters after 1000 attempts. Try different filters.")
+            self.chips += bet
+            self.game_in_progress = False
+            return
+
+        self.update_display()
+
+        # Check for blackjack
+        if self.player_hands[0].is_blackjack() and self.dealer_hand.is_blackjack():
+            self.dealer_hidden = False
+            self.update_display()
+            self.end_game("Both Blackjack! Push!", 0)
+        elif self.player_hands[0].is_blackjack():
+            self.dealer_hidden = False
+            self.update_display()
+            self.end_game("Blackjack! You win!", 2.5)
+        elif self.dealer_hand.is_blackjack():
+            self.dealer_hidden = False
+            self.update_display()
+            self.end_game("Dealer has Blackjack! You lose!", -1)
+        else:
+            # Enable buttons
+            self.deal_button.config(state=tk.DISABLED)
+            self.hit_button.config(state=tk.NORMAL)
+            self.stand_button.config(state=tk.NORMAL)
+            self.calc_ev_button.config(state=tk.NORMAL)
+
+            # Enable double down if player has enough chips
+            if self.chips >= self.current_bet:
+                self.double_button.config(state=tk.NORMAL)
+
+            # Enable split if possible
+            if self.player_hands[0].can_split() and self.chips >= self.current_bet:
+                self.split_button.config(state=tk.NORMAL)
+
+            self.status_label.config(text="Your turn! Hit or Stand?")
+
+            # Auto-calculate EV if enabled
+            if self.show_ev.get():
+                self.root.after(100, self.calculate_all_ev)
+
+    def hit(self):
+        """Player hits (takes another card)"""
+        current_hand = self.player_hands[self.current_hand_index]
+        current_hand.add_card(self.deck.deal())
+        self.update_display()
+
+        # Disable double down and split after first hit
+        self.double_button.config(state=tk.DISABLED)
+        self.split_button.config(state=tk.DISABLED)
+
+        if current_hand.is_busted():
+            self.status_label.config(text=f"Hand {self.current_hand_index + 1} Busted!")
+            self.next_hand_or_dealer()
+        else:
+            # Recalculate EV
+            if self.show_ev.get():
+                self.root.after(100, self.calculate_all_ev)
+
+    def stand(self):
+        """Player stands (keeps current hand)"""
+        self.stand_count += 1
+        self.status_label.config(text=f"Hand {self.current_hand_index + 1} stands at {self.player_hands[self.current_hand_index].value}")
+        self.next_hand_or_dealer()
+
+    def double_down(self):
+        """Player doubles down (double bet, one card, then stand)"""
+        if self.chips >= self.current_bet:
+            self.chips -= self.current_bet
+            self.current_bet *= 2
+            current_hand = self.player_hands[self.current_hand_index]
+            current_hand.add_card(self.deck.deal())
+            self.update_display()
+
+            if current_hand.is_busted():
+                self.status_label.config(text=f"Hand {self.current_hand_index + 1} Busted after Double Down!")
+            else:
+                self.status_label.config(text=f"Hand {self.current_hand_index + 1} doubled down!")
+
+            self.next_hand_or_dealer()
+
+    def split(self):
+        """Player splits their hand into two hands"""
+        if self.chips >= self.current_bet:
+            self.chips -= self.current_bet
+            self.has_split = True
+
+            # Create new hand with second card
+            original_hand = self.player_hands[self.current_hand_index]
+            new_hand = Hand()
+
+            # Move second card to new hand
+            second_card = original_hand.cards.pop()
+            original_hand.value -= second_card.value
+            if second_card.rank == 'A':
+                original_hand.aces -= 1
+            new_hand.add_card(second_card)
+
+            # Deal new cards to both hands
+            original_hand.add_card(self.deck.deal())
+            new_hand.add_card(self.deck.deal())
+
+            # Insert new hand after current hand
+            self.player_hands.insert(self.current_hand_index + 1, new_hand)
+
+            self.split_button.config(state=tk.DISABLED)
+
+            # Enable double down if player has enough chips (allowing double after split)
+            if self.chips >= self.current_bet:
+                self.double_button.config(state=tk.NORMAL)
+            else:
+                self.double_button.config(state=tk.DISABLED)
+
+            self.update_display()
+            self.status_label.config(text=f"Hand split! Playing hand {self.current_hand_index + 1}")
+
+            # Recalculate EV
+            if self.show_ev.get():
+                self.root.after(100, self.calculate_all_ev)
+
+    def next_hand_or_dealer(self):
+        """Move to next hand or dealer's turn"""
+        self.current_hand_index += 1
+
+        if self.current_hand_index < len(self.player_hands):
+            # Play next hand
+            current_hand = self.player_hands[self.current_hand_index]
+
+            # Enable double down if player has enough chips and hand has exactly 2 cards
+            if self.chips >= self.current_bet and len(current_hand.cards) == 2:
+                self.double_button.config(state=tk.NORMAL)
+            else:
+                self.double_button.config(state=tk.DISABLED)
+
+            self.split_button.config(state=tk.DISABLED)
+
+            self.update_display()
+            self.status_label.config(text=f"Playing hand {self.current_hand_index + 1}")
+
+            # Recalculate EV for new hand
+            if self.show_ev.get():
+                self.root.after(100, self.calculate_all_ev)
+        else:
+            # All hands played, dealer's turn
+            self.dealer_turn()
+
+    def dealer_turn(self):
+        """Dealer plays their hand"""
+        self.dealer_hidden = False
+        self.hit_button.config(state=tk.DISABLED)
+        self.stand_button.config(state=tk.DISABLED)
+        self.double_button.config(state=tk.DISABLED)
+        self.split_button.config(state=tk.DISABLED)
+        self.calc_ev_button.config(state=tk.DISABLED)
+
+        # Clear EV display
+        for label in self.ev_labels.values():
+            label.config(text="N/A")
+        self.best_action_label.config(text="")
+
+        self.update_display()
+
+        # Check if all player hands are busted
+        all_busted = all(hand.is_busted() for hand in self.player_hands)
+
+        if not all_busted:
+            # Dealer must hit on 16 or less, stand on 17 or more
+            while self.dealer_hand.value < 17:
+                self.dealer_hand.add_card(self.deck.deal())
+                self.update_display()
+                self.root.update()
+                self.root.after(500)
+
+        self.determine_winners()
+
+    def determine_winners(self):
+        """Determine winner and update chips"""
+        dealer_value = self.dealer_hand.value
+        dealer_busted = self.dealer_hand.is_busted()
+
+        results = []
+        total_winnings = 0
+
+        for i, hand in enumerate(self.player_hands):
+            if hand.is_busted():
+                results.append(f"Hand {i+1}: Bust (Lost)")
+            elif dealer_busted:
+                results.append(f"Hand {i+1}: Dealer bust (Won)")
+                total_winnings += self.current_bet * 2
+            elif hand.value > dealer_value:
+                results.append(f"Hand {i+1}: {hand.value} > {dealer_value} (Won)")
+                total_winnings += self.current_bet * 2
+            elif hand.value < dealer_value:
+                results.append(f"Hand {i+1}: {hand.value} < {dealer_value} (Lost)")
+            else:
+                results.append(f"Hand {i+1}: Push (Tie)")
+                total_winnings += self.current_bet
+
+        # Calculate net result
+        net_result = total_winnings - (self.current_bet * len(self.player_hands))
+
+        self.chips += total_winnings
+
+        result_message = "\n".join(results)
+        if net_result > 0:
+            result_message += f"\n\nYou won ${net_result}!"
+        elif net_result < 0:
+            result_message += f"\n\nYou lost ${-net_result}!"
+        else:
+            result_message += "\n\nPush!"
+
+        self.status_label.config(text=result_message)
+        self.update_chips_display()
+
+        self.game_in_progress = False
+        self.deal_button.config(state=tk.NORMAL)
+
+        if self.chips <= 0:
+            messagebox.showinfo("Game Over", "You're out of chips! Resetting to $1000.")
+            self.chips = 1000
+            self.update_chips_display()
+
+    def end_game(self, message, multiplier):
+        """End game with a specific result"""
+        self.status_label.config(text=message)
+
+        if multiplier > 0:
+            winnings = int(self.current_bet * multiplier)
+            self.chips += self.current_bet + winnings
+        elif multiplier == 0:
+            self.chips += self.current_bet
+
+        self.update_chips_display()
+
+        self.game_in_progress = False
+        self.deal_button.config(state=tk.NORMAL)
+        self.hit_button.config(state=tk.DISABLED)
+        self.stand_button.config(state=tk.DISABLED)
+        self.double_button.config(state=tk.DISABLED)
+        self.split_button.config(state=tk.DISABLED)
+        self.calc_ev_button.config(state=tk.DISABLED)
+
+        # Clear EV display
+        for label in self.ev_labels.values():
+            label.config(text="N/A")
+        self.best_action_label.config(text="")
+
+    def update_display(self):
+        """Update the display with current game state"""
+        # Clear canvases
+        self.dealer_canvas.delete("all")
+        self.player_canvas.delete("all")
+        self.card_images.clear()
+
+        # Dealer display
+        x_offset = 50
+        for i, card in enumerate(self.dealer_hand.cards):
+            if i == 1 and self.dealer_hidden:
+                img = self.create_card_image(card, hidden=True)
+            else:
+                img = self.create_card_image(card)
+
+            self.card_images[f'dealer_{i}'] = img
+            self.dealer_canvas.create_image(x_offset + i * 90, 10, anchor=tk.NW, image=img)
+
+        if self.dealer_hidden and len(self.dealer_hand.cards) > 0:
+            dealer_value = self.dealer_hand.cards[0].value
+        else:
+            dealer_value = self.dealer_hand.value
+
+        self.dealer_value_label.config(text=f"Value: {dealer_value}")
+
+        # Player display
+        if len(self.player_hands) > 1:
+            y_offset = 10
+            for hand_idx, hand in enumerate(self.player_hands):
+                x_offset = 50
+                for i, card in enumerate(hand.cards):
+                    img = self.create_card_image(card)
+                    self.card_images[f'player_{hand_idx}_{i}'] = img
+                    self.player_canvas.create_image(x_offset + i * 90, y_offset, anchor=tk.NW, image=img)
+
+                marker = " ← ACTIVE" if hand_idx == self.current_hand_index else ""
+                self.player_canvas.create_text(x_offset + len(hand.cards) * 90 + 20, y_offset + 60,
+                                             text=f"Hand {hand_idx+1}: {hand.value}{marker}",
+                                             fill='yellow' if hand_idx == self.current_hand_index else 'white',
+                                             font=('Arial', 12, 'bold'), anchor=tk.W)
+                y_offset += 70
+
+            self.player_value_label.config(text="")
+        else:
+            x_offset = 50
+            for i, card in enumerate(self.player_hands[0].cards):
+                img = self.create_card_image(card)
+                self.card_images[f'player_0_{i}'] = img
+                self.player_canvas.create_image(x_offset + i * 90, 10, anchor=tk.NW, image=img)
+
+            self.player_value_label.config(text=f"Value: {self.player_hands[0].value}")
+
+        self.update_chips_display()
+
+    def update_chips_display(self):
+        """Update chips display"""
+        self.chips_label.config(text=f"Chips: ${self.chips}")
+
+
+def main():
+    root = tk.Tk()
+    game = BlackjackMonteCarloGUI(root)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
