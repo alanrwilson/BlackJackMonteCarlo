@@ -410,7 +410,7 @@ class BlackjackMonteCarloGUI:
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         # Left side - Card Analysis
-        left_stats_frame = tk.Frame(main_frame, bg='#2e4d1a', relief=tk.RIDGE, bd=3, width=250)
+        left_stats_frame = tk.Frame(main_frame, bg='#1a4d2e', relief=tk.RIDGE, bd=3, width=300)
         left_stats_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
         left_stats_frame.pack_propagate(False)
 
@@ -593,90 +593,26 @@ class BlackjackMonteCarloGUI:
                                       values=player_upcard_values, state='readonly', width=12)
         player_dropdown.pack(pady=5)
 
-        # Expected Value Display
-        ev_frame = tk.Frame(stats_frame, bg='#1a4d2e')
-        ev_frame.pack(pady=10, padx=10, fill=tk.BOTH, expand=True)
-
-        tk.Label(ev_frame, text="Expected Value ($)", font=('Arial', 13, 'bold'),
-                bg='#1a4d2e', fg='white').pack(pady=5)
-
-        # EV for each action
-        self.ev_labels = {}
-        actions = ['HIT', 'STAND', 'DOUBLE', 'SPLIT']
-        colors = {'HIT': '#4CAF50', 'STAND': '#2196F3', 'DOUBLE': '#FF9800', 'SPLIT': '#9C27B0'}
-
-        for action in actions:
-            action_frame = tk.Frame(ev_frame, bg='#1a4d2e')
-            action_frame.pack(fill=tk.X, pady=5)
-
-            tk.Label(action_frame, text=f"{action}:", font=('Arial', 11, 'bold'),
-                    bg='#1a4d2e', fg=colors[action], width=7, anchor='w').pack(side=tk.LEFT)
-
-            label = tk.Label(action_frame, text="N/A", font=('Arial', 9),
-                           bg='#1a4d2e', fg='white', anchor='w')
-            label.pack(side=tk.LEFT, fill=tk.X, expand=True)
-            self.ev_labels[action] = label
-
-        # Best action recommendation
-        self.best_action_label = tk.Label(stats_frame, text="", font=('Arial', 14, 'bold'),
-                                         bg='#1a4d2e', fg='yellow', wraplength=250)
-        self.best_action_label.pack(pady=15)
-
-        # Calculate EV button
-        self.calc_ev_button = tk.Button(stats_frame, text="Calculate EV", font=('Arial', 12, 'bold'),
-                                       command=self.calculate_all_ev, bg='#FF5722', fg='white',
-                                       width=20, state=tk.DISABLED)
-        self.calc_ev_button.pack(pady=10)
-
-        # Left sidebar - Card Analysis
-        tk.Label(left_stats_frame, text="Card Analysis", font=('Arial', 18, 'bold'),
-                bg='#2e4d1a', fg='white').pack(pady=10)
-
-        # Card counting section
-        card_count_frame = tk.Frame(left_stats_frame, bg='#2e4d1a')
-        card_count_frame.pack(pady=10, padx=10, fill=tk.X)
-
-        tk.Label(card_count_frame, text="Remaining Cards", font=('Arial', 11, 'bold'),
-                bg='#2e4d1a', fg='white').pack(pady=5)
-
-        self.player_bust_label = tk.Label(card_count_frame, text="Player Bust: N/A",
-                                          font=('Arial', 10, 'bold'), bg='#2e4d1a', fg='#FF5252', width=25, anchor='w')
-        self.player_bust_label.pack(pady=3, padx=10, fill=tk.X)
-
-        self.bust_ranks_label = tk.Label(card_count_frame, text="",
-                                         font=('Arial', 9), bg='#2e4d1a', fg='#FF9999', justify=tk.LEFT,
-                                         anchor='w', wraplength=200)
-        self.bust_ranks_label.pack(pady=2, padx=15, fill=tk.X)
-
-        self.player_safe_label = tk.Label(card_count_frame, text="Player Safe: N/A",
-                                          font=('Arial', 10, 'bold'), bg='#2e4d1a', fg='#4CAF50', width=25, anchor='w')
-        self.player_safe_label.pack(pady=3, padx=10, fill=tk.X)
-
-        self.safe_ranks_label = tk.Label(card_count_frame, text="",
-                                         font=('Arial', 9), bg='#2e4d1a', fg='#90EE90', justify=tk.LEFT,
-                                         anchor='w', wraplength=200)
-        self.safe_ranks_label.pack(pady=2, padx=15, fill=tk.X)
-
         # Auto-Simulator section
-        auto_sim_frame = tk.Frame(left_stats_frame, bg='#2e4d1a', relief=tk.RIDGE, bd=2)
+        auto_sim_frame = tk.Frame(stats_frame, bg='#1a4d2e', relief=tk.RIDGE, bd=2)
         auto_sim_frame.pack(pady=10, padx=10, fill=tk.X)
 
         tk.Label(auto_sim_frame, text="Auto-Simulator", font=('Arial', 11, 'bold'),
-                bg='#2e4d1a', fg='white').pack(pady=5)
+                bg='#1a4d2e', fg='white').pack(pady=5)
 
         # Number of hands input
-        hands_input_frame = tk.Frame(auto_sim_frame, bg='#2e4d1a')
+        hands_input_frame = tk.Frame(auto_sim_frame, bg='#1a4d2e')
         hands_input_frame.pack(pady=5)
 
         tk.Label(hands_input_frame, text="Hands:", font=('Arial', 9),
-                bg='#2e4d1a', fg='white').pack(side=tk.LEFT, padx=(0, 5))
+                bg='#1a4d2e', fg='white').pack(side=tk.LEFT, padx=(0, 5))
 
         self.auto_hands_entry = tk.Entry(hands_input_frame, font=('Arial', 9), width=8)
         self.auto_hands_entry.insert(0, "1000")
         self.auto_hands_entry.pack(side=tk.LEFT)
 
         # Control buttons
-        btn_frame = tk.Frame(auto_sim_frame, bg='#2e4d1a')
+        btn_frame = tk.Frame(auto_sim_frame, bg='#1a4d2e')
         btn_frame.pack(pady=5)
 
         self.start_sim_button = tk.Button(btn_frame, text="Start", font=('Arial', 9, 'bold'),
@@ -689,15 +625,15 @@ class BlackjackMonteCarloGUI:
         self.stop_sim_button.pack(side=tk.LEFT, padx=2)
 
         # Statistics display
-        stats_display_frame = tk.Frame(auto_sim_frame, bg='#2e4d1a')
+        stats_display_frame = tk.Frame(auto_sim_frame, bg='#1a4d2e')
         stats_display_frame.pack(pady=5, fill=tk.X)
 
         self.sim_progress_label = tk.Label(stats_display_frame, text="Ready",
-                                          font=('Arial', 9, 'bold'), bg='#2e4d1a', fg='yellow')
+                                          font=('Arial', 9, 'bold'), bg='#1a4d2e', fg='yellow')
         self.sim_progress_label.pack(pady=2)
 
         self.sim_stats_label = tk.Label(stats_display_frame, text="",
-                                        font=('Arial', 8), bg='#2e4d1a', fg='white', justify=tk.LEFT)
+                                        font=('Arial', 8), bg='#1a4d2e', fg='white', justify=tk.LEFT)
         self.sim_stats_label.pack(pady=2)
 
         # View EV Results button
@@ -705,6 +641,70 @@ class BlackjackMonteCarloGUI:
                                        command=self.show_ev_results, width=16, bg='#2196F3', fg='white',
                                        state=tk.DISABLED)
         self.view_ev_button.pack(pady=5)
+
+        # Left sidebar - Card Analysis
+        tk.Label(left_stats_frame, text="Card Analysis", font=('Arial', 18, 'bold'),
+                bg='#1a4d2e', fg='white').pack(pady=10)
+
+        # Card counting section
+        card_count_frame = tk.Frame(left_stats_frame, bg='#1a4d2e')
+        card_count_frame.pack(pady=10, padx=10, fill=tk.X)
+
+        tk.Label(card_count_frame, text="Remaining Cards", font=('Arial', 11, 'bold'),
+                bg='#1a4d2e', fg='white').pack(pady=5)
+
+        self.player_bust_label = tk.Label(card_count_frame, text="Player Bust: N/A",
+                                          font=('Arial', 10, 'bold'), bg='#1a4d2e', fg='#FF5252', width=25, anchor='w')
+        self.player_bust_label.pack(pady=3, padx=10, fill=tk.X)
+
+        self.bust_ranks_label = tk.Label(card_count_frame, text="",
+                                         font=('Arial', 9), bg='#1a4d2e', fg='#FF9999', justify=tk.LEFT,
+                                         anchor='w', wraplength=200)
+        self.bust_ranks_label.pack(pady=2, padx=15, fill=tk.X)
+
+        self.player_safe_label = tk.Label(card_count_frame, text="Player Safe: N/A",
+                                          font=('Arial', 10, 'bold'), bg='#1a4d2e', fg='#4CAF50', width=25, anchor='w')
+        self.player_safe_label.pack(pady=3, padx=10, fill=tk.X)
+
+        self.safe_ranks_label = tk.Label(card_count_frame, text="",
+                                         font=('Arial', 9), bg='#1a4d2e', fg='#90EE90', justify=tk.LEFT,
+                                         anchor='w', wraplength=200)
+        self.safe_ranks_label.pack(pady=2, padx=15, fill=tk.X)
+
+        # Expected Value Display
+        ev_frame = tk.Frame(left_stats_frame, bg='#1a4d2e', relief=tk.RIDGE, bd=2)
+        ev_frame.pack(pady=10, padx=10, fill=tk.X)
+
+        tk.Label(ev_frame, text="Expected Value ($)", font=('Arial', 13, 'bold'),
+                bg='#1a4d2e', fg='white').pack(pady=5)
+
+        # EV for each action
+        self.ev_labels = {}
+        actions = ['HIT', 'STAND', 'DOUBLE', 'SPLIT']
+        colors = {'HIT': '#4CAF50', 'STAND': '#2196F3', 'DOUBLE': '#FF9800', 'SPLIT': '#9C27B0'}
+
+        for action in actions:
+            action_frame = tk.Frame(ev_frame, bg='#1a4d2e')
+            action_frame.pack(fill=tk.X, pady=3, padx=5)
+
+            tk.Label(action_frame, text=f"{action}:", font=('Arial', 10, 'bold'),
+                    bg='#1a4d2e', fg=colors[action], width=7, anchor='w').pack(side=tk.LEFT)
+
+            label = tk.Label(action_frame, text="N/A", font=('Arial', 9),
+                           bg='#1a4d2e', fg='white', anchor='w')
+            label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            self.ev_labels[action] = label
+
+        # Best action recommendation
+        self.best_action_label = tk.Label(ev_frame, text="", font=('Arial', 12, 'bold'),
+                                         bg='#1a4d2e', fg='yellow', wraplength=220)
+        self.best_action_label.pack(pady=10)
+
+        # Calculate EV button
+        self.calc_ev_button = tk.Button(ev_frame, text="Calculate EV", font=('Arial', 11, 'bold'),
+                                       command=self.calculate_all_ev, bg='#FF5722', fg='white',
+                                       width=18, state=tk.DISABLED)
+        self.calc_ev_button.pack(pady=5)
 
     def deal_hand_with_filters(self):
         """Deal a hand respecting the filter settings. Returns True if successful, False if failed."""
@@ -1283,17 +1283,17 @@ class BlackjackMonteCarloGUI:
                 actions_data = sorted_data[dealer_upcard][player_hand]
 
                 # Create row for this player hand - using Text widget for better visibility
-                row_frame = tk.Frame(dealer_frame, bg='#2e4d1a', relief=tk.GROOVE, bd=1)
+                row_frame = tk.Frame(dealer_frame, bg='#1a4d2e', relief=tk.GROOVE, bd=1)
                 row_frame.pack(fill=tk.X, padx=10, pady=3)
 
                 # Player hand label
                 tk.Label(row_frame, text=f"Player {player_hand}:", font=('Arial', 12, 'bold'),
-                        bg='#2e4d1a', fg='white').pack(side=tk.LEFT, padx=5, pady=5)
+                        bg='#1a4d2e', fg='white').pack(side=tk.LEFT, padx=5, pady=5)
 
                 # Action EVs - display each on same row
                 action_colors = {'HIT': '#4CAF50', 'STAND': '#2196F3', 'DOUBLE': '#FF9800', 'SPLIT': '#FF00FF'}
 
-                action_container = tk.Frame(row_frame, bg='#2e4d1a')
+                action_container = tk.Frame(row_frame, bg='#1a4d2e')
                 action_container.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
                 for action in ['HIT', 'STAND', 'DOUBLE', 'SPLIT']:
@@ -1308,7 +1308,7 @@ class BlackjackMonteCarloGUI:
 
                         action_label = tk.Label(action_container,
                                               text=text,
-                                              font=('Arial', 11, 'bold'), bg='#2e4d1a',
+                                              font=('Arial', 11, 'bold'), bg='#1a4d2e',
                                               fg=action_colors.get(action, 'white'),
                                               anchor='w', padx=10)
                         action_label.pack(side=tk.LEFT, pady=5)
