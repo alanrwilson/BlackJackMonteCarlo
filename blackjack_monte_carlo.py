@@ -309,9 +309,12 @@ class BlackjackMonteCarloGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Blackjack - Monte Carlo Simulator")
-        self.root.geometry("1400x850")
+        self.root.geometry("1200x675")
         self.root.configure(bg='#0B6623')
         self.root.resizable(True, True)
+
+        # Set custom icon
+        self.set_window_icon()
 
         # Game state
         self.deck = Deck()
@@ -365,9 +368,66 @@ class BlackjackMonteCarloGUI:
 
         self.setup_gui()
 
+    def set_window_icon(self):
+        """Create and set custom window icon - save as .ico for best quality"""
+        try:
+            import os
+            icon_path = "blackjack_icon.ico"
+
+            # Only create if doesn't exist
+            if not os.path.exists(icon_path):
+                # Create multiple sizes for .ico (256, 128, 64, 48, 32, 16)
+                sizes = [256, 128, 64, 48, 32, 16]
+                icons = []
+
+                for size in sizes:
+                    img = Image.new('RGBA', (size, size), (255, 255, 255, 0))
+                    draw = ImageDraw.Draw(img)
+
+                    # Green background (felt table color)
+                    draw.rectangle([0, 0, size, size], fill='#0B6623')
+
+                    # White card overlay - vertical rectangle
+                    card_margin = size // 8
+                    draw.rectangle([card_margin, card_margin, size-card_margin, size-card_margin],
+                                  fill='white', outline='black', width=max(2, size//32))
+
+                    # Load appropriate font size
+                    font_size = size // 2
+                    try:
+                        font = ImageFont.truetype("arialbd.ttf", font_size)
+                    except:
+                        try:
+                            font = ImageFont.truetype("arial.ttf", font_size)
+                        except:
+                            font = ImageFont.load_default()
+
+                    # Draw "21" in center for blackjack
+                    text = "21"
+                    # Get text bounding box for centering
+                    bbox = draw.textbbox((0, 0), text, font=font)
+                    text_width = bbox[2] - bbox[0]
+                    text_height = bbox[3] - bbox[1]
+                    x = (size - text_width) // 2
+                    y = (size - text_height) // 2 - size // 16
+
+                    draw.text((x, y), text, fill='#CC0000', font=font)
+
+                    icons.append(img)
+
+                # Save as .ico with multiple sizes
+                icons[0].save(icon_path, format='ICO', sizes=[(s, s) for s in sizes])
+
+            # Set the icon
+            self.root.iconbitmap(icon_path)
+
+        except Exception as e:
+            # If icon creation fails, silently continue
+            pass
+
     def create_card_image(self, card, hidden=False):
         """Create a card image using PIL"""
-        width, height = 80, 120
+        width, height = 60, 90
 
         # Create card background
         img = Image.new('RGB', (width, height), 'white')
@@ -377,8 +437,8 @@ class BlackjackMonteCarloGUI:
             # Draw card back
             img = Image.new('RGB', (width, height), '#0000AA')
             draw = ImageDraw.Draw(img)
-            draw.rectangle([5, 5, width-5, height-5], outline='white', width=3)
-            draw.rectangle([10, 10, width-10, height-10], outline='white', width=2)
+            draw.rectangle([3, 3, width-3, height-3], outline='white', width=2)
+            draw.rectangle([6, 6, width-6, height-6], outline='white', width=1)
         else:
             # Draw card border
             draw.rectangle([0, 0, width-1, height-1], outline='black', width=2)
@@ -388,22 +448,22 @@ class BlackjackMonteCarloGUI:
 
             # Draw rank in top-left
             try:
-                font = ImageFont.truetype("arial.ttf", 24)
-                small_font = ImageFont.truetype("arial.ttf", 32)
+                font = ImageFont.truetype("arial.ttf", 16)
+                small_font = ImageFont.truetype("arial.ttf", 22)
             except:
                 font = ImageFont.load_default()
                 small_font = ImageFont.load_default()
 
             # Top left
-            draw.text((8, 5), card.rank, fill=color, font=font)
-            draw.text((8, 30), card.suit, fill=color, font=font)
+            draw.text((5, 3), card.rank, fill=color, font=font)
+            draw.text((5, 20), card.suit, fill=color, font=font)
 
             # Center
-            draw.text((width//2 - 15, height//2 - 20), card.suit, fill=color, font=small_font)
+            draw.text((width//2 - 10, height//2 - 15), card.suit, fill=color, font=small_font)
 
             # Bottom right (upside down)
-            draw.text((width - 25, height - 35), card.rank, fill=color, font=font)
-            draw.text((width - 25, height - 60), card.suit, fill=color, font=font)
+            draw.text((width - 18, height - 25), card.rank, fill=color, font=font)
+            draw.text((width - 18, height - 42), card.suit, fill=color, font=font)
 
         return ImageTk.PhotoImage(img)
 
@@ -414,7 +474,7 @@ class BlackjackMonteCarloGUI:
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         # Left side - Card Analysis
-        left_stats_frame = tk.Frame(main_frame, bg='#1a4d2e', relief=tk.RIDGE, bd=3, width=300)
+        left_stats_frame = tk.Frame(main_frame, bg='#1a4d2e', relief=tk.RIDGE, bd=3, width=300, height=635)
         left_stats_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
         left_stats_frame.pack_propagate(False)
 
@@ -423,96 +483,96 @@ class BlackjackMonteCarloGUI:
         game_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         # Right side - Monte Carlo Stats
-        stats_frame = tk.Frame(main_frame, bg='#1a4d2e', relief=tk.RIDGE, bd=3, width=320)
+        stats_frame = tk.Frame(main_frame, bg='#1a4d2e', relief=tk.RIDGE, bd=3, width=450, height=635)
         stats_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(10, 0))
         stats_frame.pack_propagate(False)
 
         # Title
-        title_label = tk.Label(game_frame, text="BLACKJACK - Monte Carlo", font=('Arial', 28, 'bold'),
+        title_label = tk.Label(game_frame, text="BLACKJACK - Monte Carlo", font=('Arial', 22, 'bold'),
                                bg='#0B6623', fg='white')
-        title_label.pack(pady=10)
+        title_label.pack(pady=5)
 
         # Dealer section
         dealer_frame = tk.Frame(game_frame, bg='#0B6623')
-        dealer_frame.pack(pady=5)
+        dealer_frame.pack(pady=2)
 
-        tk.Label(dealer_frame, text="Dealer's Hand", font=('Arial', 16, 'bold'),
+        tk.Label(dealer_frame, text="Dealer's Hand", font=('Arial', 14, 'bold'),
                 bg='#0B6623', fg='white').pack()
 
         # Canvas for dealer cards
-        self.dealer_canvas = tk.Canvas(dealer_frame, width=600, height=140,
+        self.dealer_canvas = tk.Canvas(dealer_frame, width=500, height=100,
                                        bg='#0B6623', highlightthickness=0)
-        self.dealer_canvas.pack(pady=5)
+        self.dealer_canvas.pack(pady=2)
 
-        self.dealer_value_label = tk.Label(dealer_frame, text="Value: 0", font=('Arial', 14),
+        self.dealer_value_label = tk.Label(dealer_frame, text="Value: 0", font=('Arial', 12),
                                           bg='#0B6623', fg='white')
         self.dealer_value_label.pack()
 
         # Player section
         player_frame = tk.Frame(game_frame, bg='#0B6623')
-        player_frame.pack(pady=5)
+        player_frame.pack(pady=2)
 
-        tk.Label(player_frame, text="Your Hand", font=('Arial', 16, 'bold'),
+        tk.Label(player_frame, text="Your Hand", font=('Arial', 14, 'bold'),
                 bg='#0B6623', fg='white').pack()
 
         # Canvas for player cards
-        self.player_canvas = tk.Canvas(player_frame, width=600, height=160,
+        self.player_canvas = tk.Canvas(player_frame, width=500, height=120,
                                        bg='#0B6623', highlightthickness=0)
-        self.player_canvas.pack(pady=5)
+        self.player_canvas.pack(pady=2)
 
-        self.player_value_label = tk.Label(player_frame, text="Value: 0", font=('Arial', 14),
+        self.player_value_label = tk.Label(player_frame, text="Value: 0", font=('Arial', 12),
                                           bg='#0B6623', fg='white')
         self.player_value_label.pack()
 
         # Status message
-        status_frame = tk.Frame(game_frame, bg='#0B6623', height=80)
-        status_frame.pack(pady=10, fill=tk.X)
+        status_frame = tk.Frame(game_frame, bg='#0B6623', height=60)
+        status_frame.pack(pady=5, fill=tk.X)
         status_frame.pack_propagate(False)
 
         self.status_label = tk.Label(status_frame, text="Place your bet to start!",
-                                    font=('Arial', 14, 'bold'), bg='#0B6623', fg='yellow',
-                                    wraplength=600, justify=tk.CENTER)
+                                    font=('Arial', 12, 'bold'), bg='#0B6623', fg='yellow',
+                                    wraplength=500, justify=tk.CENTER)
         self.status_label.pack(expand=True)
 
         # Game action buttons
         buttons_frame = tk.Frame(game_frame, bg='#0B6623')
-        buttons_frame.pack(pady=20)
+        buttons_frame.pack(pady=10)
 
-        self.deal_button = tk.Button(buttons_frame, text="Deal", font=('Arial', 14, 'bold'),
-                                     command=self.deal_cards, width=10, bg='green', fg='white')
-        self.deal_button.pack(side=tk.LEFT, padx=5)
+        self.deal_button = tk.Button(buttons_frame, text="Deal", font=('Arial', 12, 'bold'),
+                                     command=self.deal_cards, width=9, bg='green', fg='white')
+        self.deal_button.pack(side=tk.LEFT, padx=4)
 
-        self.hit_button = tk.Button(buttons_frame, text="Hit", font=('Arial', 14, 'bold'),
-                                    command=self.hit, width=10, state=tk.DISABLED)
-        self.hit_button.pack(side=tk.LEFT, padx=5)
+        self.hit_button = tk.Button(buttons_frame, text="Hit", font=('Arial', 12, 'bold'),
+                                    command=self.hit, width=9, state=tk.DISABLED)
+        self.hit_button.pack(side=tk.LEFT, padx=4)
 
-        self.stand_button = tk.Button(buttons_frame, text="Stand", font=('Arial', 14, 'bold'),
-                                      command=self.stand, width=10, state=tk.DISABLED)
-        self.stand_button.pack(side=tk.LEFT, padx=5)
+        self.stand_button = tk.Button(buttons_frame, text="Stand", font=('Arial', 12, 'bold'),
+                                      command=self.stand, width=9, state=tk.DISABLED)
+        self.stand_button.pack(side=tk.LEFT, padx=4)
 
-        self.double_button = tk.Button(buttons_frame, text="Double Down", font=('Arial', 14, 'bold'),
-                                       command=self.double_down, width=12, state=tk.DISABLED)
-        self.double_button.pack(side=tk.LEFT, padx=5)
+        self.double_button = tk.Button(buttons_frame, text="Double Down", font=('Arial', 12, 'bold'),
+                                       command=self.double_down, width=11, state=tk.DISABLED)
+        self.double_button.pack(side=tk.LEFT, padx=4)
 
-        self.split_button = tk.Button(buttons_frame, text="Split", font=('Arial', 14, 'bold'),
-                                      command=self.split, width=10, state=tk.DISABLED)
-        self.split_button.pack(side=tk.LEFT, padx=5)
+        self.split_button = tk.Button(buttons_frame, text="Split", font=('Arial', 12, 'bold'),
+                                      command=self.split, width=9, state=tk.DISABLED)
+        self.split_button.pack(side=tk.LEFT, padx=4)
 
         # Monte Carlo Stats Panel
-        tk.Label(stats_frame, text="Monte Carlo Analysis", font=('Arial', 18, 'bold'),
-                bg='#1a4d2e', fg='white').pack(pady=10)
+        tk.Label(stats_frame, text="Monte Carlo Analysis", font=('Arial', 16, 'bold'),
+                bg='#1a4d2e', fg='white').pack(pady=5)
 
         # Chips and betting section
         bet_section = tk.Frame(stats_frame, bg='#1a4d2e')
-        bet_section.pack(pady=10, padx=10, fill=tk.X)
+        bet_section.pack(pady=5, padx=10, fill=tk.X)
 
         self.chips_label = tk.Label(bet_section, text=f"Chips: ${self.chips}",
-                                    font=('Arial', 13, 'bold'), bg='#1a4d2e', fg='gold')
-        self.chips_label.pack(pady=5)
+                                    font=('Arial', 12, 'bold'), bg='#1a4d2e', fg='gold')
+        self.chips_label.pack(pady=3)
 
         # Bet amount - compact layout on one line
         bet_row = tk.Frame(bet_section, bg='#1a4d2e')
-        bet_row.pack(pady=5, fill=tk.X)
+        bet_row.pack(pady=3, fill=tk.X)
 
         tk.Label(bet_row, text="Bet:", font=('Arial', 10, 'bold'),
                 bg='#1a4d2e', fg='white').pack(side=tk.LEFT, padx=(0, 5))
@@ -530,12 +590,12 @@ class BlackjackMonteCarloGUI:
 
         # Simulation settings
         settings_frame = tk.Frame(stats_frame, bg='#1a4d2e')
-        settings_frame.pack(pady=5, padx=10, fill=tk.X)
+        settings_frame.pack(pady=3, padx=10, fill=tk.X)
 
         sim_row = tk.Frame(settings_frame, bg='#1a4d2e')
         sim_row.pack(fill=tk.X)
 
-        tk.Label(sim_row, text="Sims:", font=('Arial', 10, 'bold'),
+        tk.Label(sim_row, text="Sims:", font=('Arial', 9, 'bold'),
                 bg='#1a4d2e', fg='white').pack(side=tk.LEFT, padx=(0, 5))
 
         sim_values = [1000, 5000, 10000, 50000]
@@ -545,13 +605,9 @@ class BlackjackMonteCarloGUI:
         sim_dropdown.pack(side=tk.LEFT)
         sim_dropdown.bind('<<ComboboxSelected>>', self.update_simulations)
 
-        tk.Checkbutton(settings_frame, text="Show EV", variable=self.show_ev,
-                      font=('Arial', 9), bg='#1a4d2e', fg='white',
-                      selectcolor='#0B6623', command=self.update_ev_display).pack(pady=3)
-
         # Hand category filters
-        tk.Label(settings_frame, text="Hand Filters:", font=('Arial', 10, 'bold'),
-                bg='#1a4d2e', fg='white').pack(pady=(5, 2))
+        tk.Label(settings_frame, text="Hand Filters:", font=('Arial', 9, 'bold'),
+                bg='#1a4d2e', fg='white').pack(pady=(3, 2))
 
         hand_filter_row = tk.Frame(settings_frame, bg='#1a4d2e')
         hand_filter_row.pack(pady=3)
@@ -573,11 +629,11 @@ class BlackjackMonteCarloGUI:
                       selectcolor='#0B6623').pack(side=tk.LEFT, padx=2)
 
         # Dealer upcard filter - compact layout
-        tk.Label(settings_frame, text="Dealer Upcard:", font=('Arial', 11, 'bold'),
-                bg='#1a4d2e', fg='white').pack(pady=(10, 5))
+        tk.Label(settings_frame, text="Dealer Upcard:", font=('Arial', 9, 'bold'),
+                bg='#1a4d2e', fg='white').pack(pady=(5, 2))
 
         dealer_frame = tk.Frame(settings_frame, bg='#1a4d2e')
-        dealer_frame.pack(pady=3, padx=10, fill=tk.X)
+        dealer_frame.pack(pady=2, padx=10, fill=tk.X)
 
         tk.Checkbutton(dealer_frame, text="Dealer:", variable=self.filter_dealer_upcard,
                       font=('Arial', 9, 'bold'), bg='#1a4d2e', fg='white',
@@ -589,12 +645,12 @@ class BlackjackMonteCarloGUI:
         dealer_dropdown.pack(side=tk.LEFT)
 
         # Player cards section header
-        tk.Label(settings_frame, text="Player Cards:", font=('Arial', 11, 'bold'),
-                bg='#1a4d2e', fg='white').pack(pady=(10, 5))
+        tk.Label(settings_frame, text="Player Cards:", font=('Arial', 9, 'bold'),
+                bg='#1a4d2e', fg='white').pack(pady=(5, 2))
 
         # Player first card - compact layout
         player_first_frame = tk.Frame(settings_frame, bg='#1a4d2e')
-        player_first_frame.pack(pady=3, padx=10, fill=tk.X)
+        player_first_frame.pack(pady=2, padx=10, fill=tk.X)
 
         tk.Checkbutton(player_first_frame, text="1st:", variable=self.filter_player_upcard,
                       font=('Arial', 9, 'bold'), bg='#1a4d2e', fg='white',
@@ -607,7 +663,7 @@ class BlackjackMonteCarloGUI:
 
         # Player second card - compact layout
         player_second_frame = tk.Frame(settings_frame, bg='#1a4d2e')
-        player_second_frame.pack(pady=3, padx=10, fill=tk.X)
+        player_second_frame.pack(pady=2, padx=10, fill=tk.X)
 
         tk.Checkbutton(player_second_frame, text="2nd:", variable=self.filter_player_second_card,
                       font=('Arial', 9, 'bold'), bg='#1a4d2e', fg='white',
@@ -620,14 +676,20 @@ class BlackjackMonteCarloGUI:
 
         # Auto-Simulator section
         auto_sim_frame = tk.Frame(stats_frame, bg='#1a4d2e', relief=tk.RIDGE, bd=2)
-        auto_sim_frame.pack(pady=10, padx=10, fill=tk.X)
+        auto_sim_frame.pack(pady=5, padx=10, fill=tk.BOTH, expand=True)
 
-        tk.Label(auto_sim_frame, text="Auto-Simulator", font=('Arial', 11, 'bold'),
-                bg='#1a4d2e', fg='white').pack(pady=5)
+        tk.Label(auto_sim_frame, text="Auto-Simulator", font=('Arial', 10, 'bold'),
+                bg='#1a4d2e', fg='white').pack(pady=3)
+
+        # View EV Results button at top
+        self.view_ev_button = tk.Button(auto_sim_frame, text="View EV Results", font=('Arial', 9, 'bold'),
+                                       command=self.show_ev_results, width=16, bg='#2196F3', fg='white',
+                                       state=tk.DISABLED)
+        self.view_ev_button.pack(pady=3)
 
         # Number of hands input
         hands_input_frame = tk.Frame(auto_sim_frame, bg='#1a4d2e')
-        hands_input_frame.pack(pady=5)
+        hands_input_frame.pack(pady=3)
 
         tk.Label(hands_input_frame, text="Hands:", font=('Arial', 9),
                 bg='#1a4d2e', fg='white').pack(side=tk.LEFT, padx=(0, 5))
@@ -638,7 +700,7 @@ class BlackjackMonteCarloGUI:
 
         # Control buttons
         btn_frame = tk.Frame(auto_sim_frame, bg='#1a4d2e')
-        btn_frame.pack(pady=5)
+        btn_frame.pack(pady=3)
 
         self.start_sim_button = tk.Button(btn_frame, text="Start", font=('Arial', 9, 'bold'),
                                          command=self.start_auto_sim, width=8, bg='#4CAF50', fg='white')
@@ -651,21 +713,16 @@ class BlackjackMonteCarloGUI:
 
         # Statistics display
         stats_display_frame = tk.Frame(auto_sim_frame, bg='#1a4d2e')
-        stats_display_frame.pack(pady=5, fill=tk.X)
+        stats_display_frame.pack(pady=3, fill=tk.BOTH, expand=True)
 
         self.sim_progress_label = tk.Label(stats_display_frame, text="Ready",
                                           font=('Arial', 9, 'bold'), bg='#1a4d2e', fg='yellow')
         self.sim_progress_label.pack(pady=2)
 
         self.sim_stats_label = tk.Label(stats_display_frame, text="",
-                                        font=('Arial', 8), bg='#1a4d2e', fg='white', justify=tk.LEFT)
-        self.sim_stats_label.pack(pady=2)
-
-        # View EV Results button
-        self.view_ev_button = tk.Button(auto_sim_frame, text="View EV Results", font=('Arial', 9, 'bold'),
-                                       command=self.show_ev_results, width=16, bg='#2196F3', fg='white',
-                                       state=tk.DISABLED)
-        self.view_ev_button.pack(pady=5)
+                                        font=('Arial', 8), bg='#1a4d2e', fg='white', justify=tk.LEFT,
+                                        wraplength=410)
+        self.sim_stats_label.pack(pady=2, fill=tk.BOTH, expand=True)
 
         # Left sidebar - Card Analysis
         tk.Label(left_stats_frame, text="Card Analysis", font=('Arial', 18, 'bold'),
@@ -700,8 +757,16 @@ class BlackjackMonteCarloGUI:
         ev_frame = tk.Frame(left_stats_frame, bg='#1a4d2e', relief=tk.RIDGE, bd=2)
         ev_frame.pack(pady=10, padx=10, fill=tk.X)
 
-        tk.Label(ev_frame, text="Expected Value ($)", font=('Arial', 13, 'bold'),
-                bg='#1a4d2e', fg='white').pack(pady=5)
+        # EV header with Show EV checkbox
+        ev_header_frame = tk.Frame(ev_frame, bg='#1a4d2e')
+        ev_header_frame.pack(pady=5, fill=tk.X)
+
+        tk.Label(ev_header_frame, text="Expected Value ($)", font=('Arial', 13, 'bold'),
+                bg='#1a4d2e', fg='white').pack(side=tk.LEFT, padx=(5, 10))
+
+        tk.Checkbutton(ev_header_frame, text="Show", variable=self.show_ev,
+                      font=('Arial', 9), bg='#1a4d2e', fg='white',
+                      selectcolor='#0B6623', command=self.update_ev_display).pack(side=tk.LEFT)
 
         # EV for each action
         self.ev_labels = {}
@@ -1785,7 +1850,7 @@ class BlackjackMonteCarloGUI:
         self.card_images.clear()
 
         # Dealer display
-        x_offset = 50
+        x_offset = 30
         for i, card in enumerate(self.dealer_hand.cards):
             if i == 1 and self.dealer_hidden:
                 img = self.create_card_image(card, hidden=True)
@@ -1793,7 +1858,7 @@ class BlackjackMonteCarloGUI:
                 img = self.create_card_image(card)
 
             self.card_images[f'dealer_{i}'] = img
-            self.dealer_canvas.create_image(x_offset + i * 90, 10, anchor=tk.NW, image=img)
+            self.dealer_canvas.create_image(x_offset + i * 65, 5, anchor=tk.NW, image=img)
 
         if self.dealer_hidden and len(self.dealer_hand.cards) > 0:
             dealer_value = self.dealer_hand.cards[0].value
@@ -1804,28 +1869,28 @@ class BlackjackMonteCarloGUI:
 
         # Player display
         if len(self.player_hands) > 1:
-            y_offset = 10
+            y_offset = 5
             for hand_idx, hand in enumerate(self.player_hands):
-                x_offset = 50
+                x_offset = 30
                 for i, card in enumerate(hand.cards):
                     img = self.create_card_image(card)
                     self.card_images[f'player_{hand_idx}_{i}'] = img
-                    self.player_canvas.create_image(x_offset + i * 90, y_offset, anchor=tk.NW, image=img)
+                    self.player_canvas.create_image(x_offset + i * 65, y_offset, anchor=tk.NW, image=img)
 
                 marker = " ← ACTIVE" if hand_idx == self.current_hand_index else ""
-                self.player_canvas.create_text(x_offset + len(hand.cards) * 90 + 20, y_offset + 60,
+                self.player_canvas.create_text(x_offset + len(hand.cards) * 65 + 15, y_offset + 45,
                                              text=f"Hand {hand_idx+1}: {hand.value}{marker}",
                                              fill='yellow' if hand_idx == self.current_hand_index else 'white',
-                                             font=('Arial', 12, 'bold'), anchor=tk.W)
-                y_offset += 70
+                                             font=('Arial', 11, 'bold'), anchor=tk.W)
+                y_offset += 55
 
             self.player_value_label.config(text="")
         else:
-            x_offset = 50
+            x_offset = 30
             for i, card in enumerate(self.player_hands[0].cards):
                 img = self.create_card_image(card)
                 self.card_images[f'player_0_{i}'] = img
-                self.player_canvas.create_image(x_offset + i * 90, 10, anchor=tk.NW, image=img)
+                self.player_canvas.create_image(x_offset + i * 65, 5, anchor=tk.NW, image=img)
 
             self.player_value_label.config(text=f"Value: {self.player_hands[0].value}")
 
