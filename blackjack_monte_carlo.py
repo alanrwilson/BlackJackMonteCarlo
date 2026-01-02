@@ -344,6 +344,10 @@ class BlackjackMonteCarloGUI:
         self.filter_player_upcard = tk.BooleanVar(value=False)
         self.player_upcard_value = tk.StringVar(value="Any")
 
+        # Player second card filter
+        self.filter_player_second_card = tk.BooleanVar(value=False)
+        self.player_second_card_value = tk.StringVar(value="Any")
+
         # Auto-simulator state
         self.auto_sim_running = False
         self.auto_sim_hands_to_play = 0
@@ -506,22 +510,23 @@ class BlackjackMonteCarloGUI:
                                     font=('Arial', 13, 'bold'), bg='#1a4d2e', fg='gold')
         self.chips_label.pack(pady=5)
 
-        tk.Label(bet_section, text="Bet Amount:", font=('Arial', 11, 'bold'),
-                bg='#1a4d2e', fg='white').pack(pady=(5, 2))
+        # Bet amount - compact layout on one line
+        bet_row = tk.Frame(bet_section, bg='#1a4d2e')
+        bet_row.pack(pady=5, fill=tk.X)
 
-        self.bet_entry = tk.Entry(bet_section, font=('Arial', 11), width=15, justify='center')
+        tk.Label(bet_row, text="Bet:", font=('Arial', 10, 'bold'),
+                bg='#1a4d2e', fg='white').pack(side=tk.LEFT, padx=(0, 5))
+
+        self.bet_entry = tk.Entry(bet_row, font=('Arial', 10), width=6, justify='center')
         self.bet_entry.insert(0, "10")
-        self.bet_entry.pack(pady=5)
+        self.bet_entry.pack(side=tk.LEFT, padx=(0, 5))
 
-        # Betting buttons
-        bet_buttons_frame = tk.Frame(bet_section, bg='#1a4d2e')
-        bet_buttons_frame.pack(pady=5)
-
+        # Betting buttons on same line
         bet_amounts = [10, 25, 50, 100]
         for i, amount in enumerate(bet_amounts):
-            btn = tk.Button(bet_buttons_frame, text=f"${amount}", font=('Arial', 8),
+            btn = tk.Button(bet_row, text=f"${amount}", font=('Arial', 8),
                           command=lambda a=amount: self.quick_bet(a), width=4)
-            btn.pack(side=tk.LEFT, padx=2)
+            btn.pack(side=tk.LEFT, padx=1)
 
         # Simulation settings
         settings_frame = tk.Frame(stats_frame, bg='#1a4d2e')
@@ -567,31 +572,51 @@ class BlackjackMonteCarloGUI:
                       font=('Arial', 8), bg='#1a4d2e', fg='white',
                       selectcolor='#0B6623').pack(side=tk.LEFT, padx=2)
 
-        # Dealer upcard filter
+        # Dealer upcard filter - compact layout
         tk.Label(settings_frame, text="Dealer Upcard:", font=('Arial', 11, 'bold'),
                 bg='#1a4d2e', fg='white').pack(pady=(10, 5))
 
-        tk.Checkbutton(settings_frame, text="Specify Dealer Upcard", variable=self.filter_dealer_upcard,
-                      font=('Arial', 9), bg='#1a4d2e', fg='white',
-                      selectcolor='#0B6623', anchor='w').pack(fill=tk.X, padx=10)
+        dealer_frame = tk.Frame(settings_frame, bg='#1a4d2e')
+        dealer_frame.pack(pady=3, padx=10, fill=tk.X)
+
+        tk.Checkbutton(dealer_frame, text="Dealer:", variable=self.filter_dealer_upcard,
+                      font=('Arial', 9, 'bold'), bg='#1a4d2e', fg='white',
+                      selectcolor='#0B6623').pack(side=tk.LEFT, padx=(0, 5))
 
         dealer_upcard_values = ['Any', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K']
-        dealer_dropdown = ttk.Combobox(settings_frame, textvariable=self.dealer_upcard_value,
-                                      values=dealer_upcard_values, state='readonly', width=12)
-        dealer_dropdown.pack(pady=5)
+        dealer_dropdown = ttk.Combobox(dealer_frame, textvariable=self.dealer_upcard_value,
+                                      values=dealer_upcard_values, state='readonly', width=8)
+        dealer_dropdown.pack(side=tk.LEFT)
 
-        # Player upcard filter
-        tk.Label(settings_frame, text="Player First Card:", font=('Arial', 11, 'bold'),
+        # Player cards section header
+        tk.Label(settings_frame, text="Player Cards:", font=('Arial', 11, 'bold'),
                 bg='#1a4d2e', fg='white').pack(pady=(10, 5))
 
-        tk.Checkbutton(settings_frame, text="Specify Player First Card", variable=self.filter_player_upcard,
-                      font=('Arial', 9), bg='#1a4d2e', fg='white',
-                      selectcolor='#0B6623', anchor='w').pack(fill=tk.X, padx=10)
+        # Player first card - compact layout
+        player_first_frame = tk.Frame(settings_frame, bg='#1a4d2e')
+        player_first_frame.pack(pady=3, padx=10, fill=tk.X)
+
+        tk.Checkbutton(player_first_frame, text="1st:", variable=self.filter_player_upcard,
+                      font=('Arial', 9, 'bold'), bg='#1a4d2e', fg='white',
+                      selectcolor='#0B6623').pack(side=tk.LEFT, padx=(0, 5))
 
         player_upcard_values = ['Any', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K']
-        player_dropdown = ttk.Combobox(settings_frame, textvariable=self.player_upcard_value,
-                                      values=player_upcard_values, state='readonly', width=12)
-        player_dropdown.pack(pady=5)
+        player_dropdown = ttk.Combobox(player_first_frame, textvariable=self.player_upcard_value,
+                                      values=player_upcard_values, state='readonly', width=8)
+        player_dropdown.pack(side=tk.LEFT)
+
+        # Player second card - compact layout
+        player_second_frame = tk.Frame(settings_frame, bg='#1a4d2e')
+        player_second_frame.pack(pady=3, padx=10, fill=tk.X)
+
+        tk.Checkbutton(player_second_frame, text="2nd:", variable=self.filter_player_second_card,
+                      font=('Arial', 9, 'bold'), bg='#1a4d2e', fg='white',
+                      selectcolor='#0B6623').pack(side=tk.LEFT, padx=(0, 5))
+
+        player_second_card_values = ['Any', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K']
+        player_second_dropdown = ttk.Combobox(player_second_frame, textvariable=self.player_second_card_value,
+                                      values=player_second_card_values, state='readonly', width=8)
+        player_second_dropdown.pack(side=tk.LEFT)
 
         # Auto-Simulator section
         auto_sim_frame = tk.Frame(stats_frame, bg='#1a4d2e', relief=tk.RIDGE, bd=2)
@@ -759,7 +784,29 @@ class BlackjackMonteCarloGUI:
             else:
                 self.dealer_hand.add_card(self.deck.deal())
 
-            self.player_hands[0].add_card(self.deck.deal())
+            # Deal player second card (with filter if enabled)
+            if self.filter_player_second_card.get() and self.player_second_card_value.get() != "Any":
+                # Find a card matching the specified rank
+                target_rank = self.player_second_card_value.get()
+                player_card_2 = None
+                for card in self.deck.cards:
+                    if card.rank == target_rank:
+                        player_card_2 = card
+                        self.deck.cards.remove(card)
+                        break
+
+                if player_card_2:
+                    self.player_hands[0].add_card(player_card_2)
+                else:
+                    # No matching card found, reshuffle and try again
+                    self.deck.cards.extend(self.player_hands[0].cards)
+                    self.deck.cards.extend(self.dealer_hand.cards)
+                    self.deck.shuffle()
+                    attempts += 1
+                    continue
+            else:
+                self.player_hands[0].add_card(self.deck.deal())
+
             self.dealer_hand.add_card(self.deck.deal())
 
             # Check if hand matches filter
@@ -1493,7 +1540,13 @@ class BlackjackMonteCarloGUI:
             if self.player_hands[0].can_split() and self.chips >= self.current_bet:
                 self.split_button.config(state=tk.NORMAL)
 
-            self.status_label.config(text="Your turn! Hit or Stand?")
+            # Check if player already has 21 (but not blackjack)
+            if self.player_hands[0].value == 21:
+                self.hit_button.config(state=tk.DISABLED)
+                self.double_button.config(state=tk.DISABLED)
+                self.status_label.config(text="You have 21! (Hit Stand to continue)")
+            else:
+                self.status_label.config(text="Your turn! Hit or Stand?")
 
             # Auto-calculate EV if enabled
             if self.show_ev.get():
@@ -1511,6 +1564,10 @@ class BlackjackMonteCarloGUI:
 
         if current_hand.is_busted():
             self.status_label.config(text=f"Hand {self.current_hand_index + 1} Busted!")
+            self.next_hand_or_dealer()
+        elif current_hand.value == 21:
+            # Automatically stand on 21
+            self.status_label.config(text=f"Hand {self.current_hand_index + 1} - 21! Auto-standing.")
             self.next_hand_or_dealer()
         else:
             # Recalculate EV
@@ -1572,7 +1629,15 @@ class BlackjackMonteCarloGUI:
                 self.double_button.config(state=tk.DISABLED)
 
             self.update_display()
-            self.status_label.config(text=f"Hand split! Playing hand {self.current_hand_index + 1}")
+
+            # Check if first hand after split has 21
+            current_hand = self.player_hands[self.current_hand_index]
+            if current_hand.value == 21:
+                self.hit_button.config(state=tk.DISABLED)
+                self.double_button.config(state=tk.DISABLED)
+                self.status_label.config(text=f"Hand split! Hand {self.current_hand_index + 1} has 21! (Hit Stand to continue)")
+            else:
+                self.status_label.config(text=f"Hand split! Playing hand {self.current_hand_index + 1}")
 
             # Recalculate EV
             if self.show_ev.get():
@@ -1595,7 +1660,14 @@ class BlackjackMonteCarloGUI:
             self.split_button.config(state=tk.DISABLED)
 
             self.update_display()
-            self.status_label.config(text=f"Playing hand {self.current_hand_index + 1}")
+
+            # Check if this hand already has 21
+            if current_hand.value == 21:
+                self.hit_button.config(state=tk.DISABLED)
+                self.double_button.config(state=tk.DISABLED)
+                self.status_label.config(text=f"Hand {self.current_hand_index + 1} has 21! (Hit Stand to continue)")
+            else:
+                self.status_label.config(text=f"Playing hand {self.current_hand_index + 1}")
 
             # Recalculate EV for new hand
             if self.show_ev.get():
