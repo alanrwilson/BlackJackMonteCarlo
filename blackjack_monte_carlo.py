@@ -3,6 +3,7 @@ from tkinter import messagebox, ttk
 import random
 import copy
 from PIL import Image, ImageDraw, ImageFont, ImageTk
+import threading
 
 
 class Card:
@@ -263,14 +264,27 @@ class MonteCarloSimulator:
         else:
             return 0  # Push
 
-    def calculate_expected_value(self, action, player_hand, dealer_upcard, known_cards, bet):
+    def calculate_expected_value(self, action, player_hand, dealer_upcard, known_cards, bet, cancel_flag=None):
         """Calculate expected value for a specific action and return EV with W-L-P stats"""
+        # Handle 0 simulations case
+        if self.num_simulations == 0:
+            return {
+                'ev': 0,
+                'wins': 0,
+                'losses': 0,
+                'pushes': 0
+            }
+
         total = 0
         wins = 0
         losses = 0
         pushes = 0
 
         for _ in range(self.num_simulations):
+            # Check if calculation should be cancelled
+            if cancel_flag and cancel_flag():
+                return None
+
             # Create fresh deck for each simulation
             deck = self.create_fresh_deck(known_cards)
 
@@ -365,6 +379,11 @@ class BlackjackMonteCarloGUI:
 
         # Card image cache
         self.card_images = {}
+
+        # EV calculation state
+        self.ev_calculation_in_progress = False
+        self.cancel_ev_calculation = False
+        self.ev_calculation_thread = None
 
         self.setup_gui()
 
@@ -594,10 +613,10 @@ class BlackjackMonteCarloGUI:
         sim_row = tk.Frame(settings_frame, bg='#1a4d2e')
         sim_row.pack(fill=tk.X)
 
-        tk.Label(sim_row, text="Sims:", font=('Arial', 9, 'bold'),
+        tk.Label(sim_row, text="EV Simulations:", font=('Arial', 9, 'bold'),
                 bg='#1a4d2e', fg='white').pack(side=tk.LEFT, padx=(0, 5))
 
-        sim_values = [1000, 5000, 10000, 50000]
+        sim_values = [0, 1000, 5000, 10000, 50000, 100000]
         self.sim_var = tk.IntVar(value=10000)
         sim_dropdown = ttk.Combobox(sim_row, textvariable=self.sim_var,
                                    values=sim_values, state='readonly', width=10)
@@ -960,6 +979,21 @@ class BlackjackMonteCarloGUI:
         """Update number of simulations"""
         self.num_simulations = self.sim_var.get()
         self.simulator.num_simulations = self.num_simulations
+
+        # Grey out EV section if 0 simulations
+        if self.num_simulations == 0:
+            # Disable and grey out EV labels
+            for label in self.ev_labels.values():
+                label.config(fg='#666666', text="Disabled")
+            self.best_action_label.config(fg='#666666', text="EV Disabled\n(0 simulations)")
+            self.calc_ev_button.config(state=tk.DISABLED)
+        else:
+            # Re-enable EV labels
+            for label in self.ev_labels.values():
+                label.config(fg='white', text="N/A")
+            self.best_action_label.config(fg='yellow', text="")
+            if self.game_in_progress:
+                self.calc_ev_button.config(state=tk.NORMAL)
 
     def update_ev_display(self):
         """Toggle EV display"""
@@ -1469,17 +1503,35 @@ class BlackjackMonteCarloGUI:
 
         return matches
 
+    def cancel_ev_calculation_if_running(self):
+        """Cancel any ongoing EV calculation"""
+        if self.ev_calculation_in_progress:
+            self.cancel_ev_calculation = True
+            # Wait briefly for thread to finish
+            if self.ev_calculation_thread and self.ev_calculation_thread.is_alive():
+                self.ev_calculation_thread.join(timeout=0.1)
+
     def calculate_all_ev(self):
-        """Calculate expected value for all possible actions"""
+        """Calculate expected value for all possible actions asynchronously"""
         if not self.game_in_progress or not self.show_ev.get():
+            return
+
+        # Don't calculate if simulations set to 0
+        if self.num_simulations == 0:
             return
 
         # Safety check for valid hand index
         if self.current_hand_index >= len(self.player_hands):
             return
 
+        # Cancel any ongoing calculation
+        self.cancel_ev_calculation_if_running()
+
+        # Mark as in progress
+        self.ev_calculation_in_progress = True
+        self.cancel_ev_calculation = False
+
         self.calc_ev_button.config(state=tk.DISABLED, text="Calculating...")
-        self.root.update()
 
         current_hand = self.player_hands[self.current_hand_index]
 
@@ -1493,35 +1545,93 @@ class BlackjackMonteCarloGUI:
             known_cards.extend(hand.cards)
         known_cards.append(self.dealer_hand.cards[0])
 
+        # Determine which actions are possible
+        can_double = self.chips >= self.current_bet and len(current_hand.cards) == 2
+        can_split = current_hand.can_split() and self.chips >= self.current_bet
+
+        # Run calculation in background thread
+        def calculate_in_thread():
+            results = {}
+
+            # Calculate EV for Hit
+            result_hit = self.simulator.calculate_expected_value(
+                "HIT", current_hand, visible_dealer_hand, known_cards, self.current_bet,
+                cancel_flag=lambda: self.cancel_ev_calculation)
+            if result_hit is not None:
+                results['HIT'] = result_hit
+
+            # Calculate EV for Stand
+            if not self.cancel_ev_calculation:
+                result_stand = self.simulator.calculate_expected_value(
+                    "STAND", current_hand, visible_dealer_hand, known_cards, self.current_bet,
+                    cancel_flag=lambda: self.cancel_ev_calculation)
+                if result_stand is not None:
+                    results['STAND'] = result_stand
+
+            # Calculate EV for Double Down if possible
+            if can_double and not self.cancel_ev_calculation:
+                result_double = self.simulator.calculate_expected_value(
+                    "DOUBLE", current_hand, visible_dealer_hand, known_cards, self.current_bet,
+                    cancel_flag=lambda: self.cancel_ev_calculation)
+                if result_double is not None:
+                    results['DOUBLE'] = result_double
+
+            # Calculate EV for Split if possible
+            if can_split and not self.cancel_ev_calculation:
+                result_split = self.simulator.calculate_expected_value(
+                    "SPLIT", current_hand, visible_dealer_hand, known_cards, self.current_bet,
+                    cancel_flag=lambda: self.cancel_ev_calculation)
+                if result_split is not None:
+                    results['SPLIT'] = result_split
+
+            # Update UI in main thread
+            self.root.after(0, lambda: self.update_ev_display(results, can_double, can_split))
+
+        # Start thread
+        self.ev_calculation_thread = threading.Thread(target=calculate_in_thread, daemon=True)
+        self.ev_calculation_thread.start()
+
+    def update_ev_display(self, results, can_double, can_split):
+        """Update EV display with calculation results (runs in main thread)"""
+        # Check if calculation was cancelled
+        if self.cancel_ev_calculation:
+            self.calc_ev_button.config(state=tk.NORMAL, text="Calculate EV")
+            self.ev_calculation_in_progress = False
+            return
+
         ev_results = {}
 
-        # Calculate EV for Hit
-        result_hit = self.simulator.calculate_expected_value(
-            "HIT", current_hand, visible_dealer_hand, known_cards, self.current_bet)
-        ev_results['HIT'] = result_hit['ev']
-        self.ev_labels['HIT'].config(text=f"${result_hit['ev']:+.2f} ({result_hit['wins']}W-{result_hit['losses']}L-{result_hit['pushes']}P)")
+        # Update Hit
+        if 'HIT' in results:
+            result = results['HIT']
+            ev_results['HIT'] = result['ev']
+            self.ev_labels['HIT'].config(
+                text=f"${result['ev']:+.2f} ({result['wins']}W-{result['losses']}L-{result['pushes']}P)")
 
-        # Calculate EV for Stand
-        result_stand = self.simulator.calculate_expected_value(
-            "STAND", current_hand, visible_dealer_hand, known_cards, self.current_bet)
-        ev_results['STAND'] = result_stand['ev']
-        self.ev_labels['STAND'].config(text=f"${result_stand['ev']:+.2f} ({result_stand['wins']}W-{result_stand['losses']}L-{result_stand['pushes']}P)")
+        # Update Stand
+        if 'STAND' in results:
+            result = results['STAND']
+            ev_results['STAND'] = result['ev']
+            self.ev_labels['STAND'].config(
+                text=f"${result['ev']:+.2f} ({result['wins']}W-{result['losses']}L-{result['pushes']}P)")
 
-        # Calculate EV for Double Down if possible
-        if self.chips >= self.current_bet and len(current_hand.cards) == 2:
-            result_double = self.simulator.calculate_expected_value(
-                "DOUBLE", current_hand, visible_dealer_hand, known_cards, self.current_bet)
-            ev_results['DOUBLE'] = result_double['ev']
-            self.ev_labels['DOUBLE'].config(text=f"${result_double['ev']:+.2f} ({result_double['wins']}W-{result_double['losses']}L-{result_double['pushes']}P)")
+        # Update Double
+        if can_double:
+            if 'DOUBLE' in results:
+                result = results['DOUBLE']
+                ev_results['DOUBLE'] = result['ev']
+                self.ev_labels['DOUBLE'].config(
+                    text=f"${result['ev']:+.2f} ({result['wins']}W-{result['losses']}L-{result['pushes']}P)")
         else:
             self.ev_labels['DOUBLE'].config(text="N/A")
 
-        # Calculate EV for Split if possible
-        if current_hand.can_split() and self.chips >= self.current_bet:
-            result_split = self.simulator.calculate_expected_value(
-                "SPLIT", current_hand, visible_dealer_hand, known_cards, self.current_bet)
-            ev_results['SPLIT'] = result_split['ev']
-            self.ev_labels['SPLIT'].config(text=f"${result_split['ev']:+.2f} ({result_split['wins']}W-{result_split['losses']}L-{result_split['pushes']}P)")
+        # Update Split
+        if can_split:
+            if 'SPLIT' in results:
+                result = results['SPLIT']
+                ev_results['SPLIT'] = result['ev']
+                self.ev_labels['SPLIT'].config(
+                    text=f"${result['ev']:+.2f} ({result['wins']}W-{result['losses']}L-{result['pushes']}P)")
         else:
             self.ev_labels['SPLIT'].config(text="N/A")
 
@@ -1534,6 +1644,7 @@ class BlackjackMonteCarloGUI:
                 text=f"Best Action:\n{best_action}\n(EV: ${best_ev:.2f})")
 
         self.calc_ev_button.config(state=tk.NORMAL, text="Calculate EV")
+        self.ev_calculation_in_progress = False
 
         # Update card counts
         self.calculate_card_counts()
@@ -1598,7 +1709,9 @@ class BlackjackMonteCarloGUI:
             self.deal_button.config(state=tk.DISABLED)
             self.hit_button.config(state=tk.NORMAL)
             self.stand_button.config(state=tk.NORMAL)
-            self.calc_ev_button.config(state=tk.NORMAL)
+            # Only enable calc_ev_button if simulations > 0
+            if self.num_simulations > 0:
+                self.calc_ev_button.config(state=tk.NORMAL)
 
             # Enable double down if player has enough chips
             if self.chips >= self.current_bet:
@@ -1616,12 +1729,15 @@ class BlackjackMonteCarloGUI:
             else:
                 self.status_label.config(text="Your turn! Hit or Stand?")
 
-            # Auto-calculate EV if enabled
-            if self.show_ev.get():
+            # Auto-calculate EV if enabled and simulations > 0
+            if self.show_ev.get() and self.num_simulations > 0:
                 self.root.after(100, self.calculate_all_ev)
 
     def hit(self):
         """Player hits (takes another card)"""
+        # Cancel any ongoing EV calculation
+        self.cancel_ev_calculation_if_running()
+
         current_hand = self.player_hands[self.current_hand_index]
         current_hand.add_card(self.deck.deal())
         self.update_display()
@@ -1638,18 +1754,24 @@ class BlackjackMonteCarloGUI:
             self.status_label.config(text=f"Hand {self.current_hand_index + 1} - 21! Auto-standing.")
             self.next_hand_or_dealer()
         else:
-            # Recalculate EV
-            if self.show_ev.get():
+            # Recalculate EV if enabled and simulations > 0
+            if self.show_ev.get() and self.num_simulations > 0:
                 self.root.after(100, self.calculate_all_ev)
 
     def stand(self):
         """Player stands (keeps current hand)"""
+        # Cancel any ongoing EV calculation
+        self.cancel_ev_calculation_if_running()
+
         self.stand_count += 1
         self.status_label.config(text=f"Hand {self.current_hand_index + 1} stands at {self.player_hands[self.current_hand_index].value}")
         self.next_hand_or_dealer()
 
     def double_down(self):
         """Player doubles down (double bet, one card, then stand)"""
+        # Cancel any ongoing EV calculation
+        self.cancel_ev_calculation_if_running()
+
         if self.chips >= self.current_bet:
             self.chips -= self.current_bet
             self.current_bet *= 2
@@ -1666,6 +1788,9 @@ class BlackjackMonteCarloGUI:
 
     def split(self):
         """Player splits their hand into two hands"""
+        # Cancel any ongoing EV calculation
+        self.cancel_ev_calculation_if_running()
+
         if self.chips >= self.current_bet:
             self.chips -= self.current_bet
             self.has_split = True
@@ -1707,8 +1832,8 @@ class BlackjackMonteCarloGUI:
             else:
                 self.status_label.config(text=f"Hand split! Playing hand {self.current_hand_index + 1}")
 
-            # Recalculate EV
-            if self.show_ev.get():
+            # Recalculate EV if enabled and simulations > 0
+            if self.show_ev.get() and self.num_simulations > 0:
                 self.root.after(100, self.calculate_all_ev)
 
     def next_hand_or_dealer(self):
@@ -1737,8 +1862,8 @@ class BlackjackMonteCarloGUI:
             else:
                 self.status_label.config(text=f"Playing hand {self.current_hand_index + 1}")
 
-            # Recalculate EV for new hand
-            if self.show_ev.get():
+            # Recalculate EV for new hand if enabled and simulations > 0
+            if self.show_ev.get() and self.num_simulations > 0:
                 self.root.after(100, self.calculate_all_ev)
         else:
             # All hands played, dealer's turn
