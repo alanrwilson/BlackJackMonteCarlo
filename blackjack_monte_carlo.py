@@ -427,7 +427,7 @@ class BlackjackMonteCarloGUI:
 
     def create_card_image(self, card, hidden=False):
         """Create a card image using PIL"""
-        width, height = 60, 90
+        width, height = 66, 99
 
         # Create card background
         img = Image.new('RGB', (width, height), 'white')
@@ -474,69 +474,68 @@ class BlackjackMonteCarloGUI:
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         # Left side - Card Analysis
-        left_stats_frame = tk.Frame(main_frame, bg='#1a4d2e', relief=tk.RIDGE, bd=3, width=300, height=635)
+        left_stats_frame = tk.Frame(main_frame, bg='#1a4d2e', highlightbackground='gold', highlightthickness=2, width=300, height=635)
         left_stats_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
         left_stats_frame.pack_propagate(False)
 
         # Center - Game
-        game_frame = tk.Frame(main_frame, bg='#0B6623')
-        game_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        game_frame = tk.Frame(main_frame, bg='#1a4d2e', highlightbackground='gold', highlightthickness=2)
+        game_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
 
         # Right side - Monte Carlo Stats
-        stats_frame = tk.Frame(main_frame, bg='#1a4d2e', relief=tk.RIDGE, bd=3, width=450, height=635)
+        stats_frame = tk.Frame(main_frame, bg='#1a4d2e', highlightbackground='gold', highlightthickness=2, width=450, height=635)
         stats_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(10, 0))
         stats_frame.pack_propagate(False)
 
         # Title
         title_label = tk.Label(game_frame, text="BLACKJACK - Monte Carlo", font=('Arial', 22, 'bold'),
-                               bg='#0B6623', fg='white')
+                               bg='#1a4d2e', fg='white')
         title_label.pack(pady=5)
 
         # Dealer section
-        dealer_frame = tk.Frame(game_frame, bg='#0B6623')
+        dealer_frame = tk.Frame(game_frame, bg='#1a4d2e')
         dealer_frame.pack(pady=2)
 
         tk.Label(dealer_frame, text="Dealer's Hand", font=('Arial', 14, 'bold'),
-                bg='#0B6623', fg='white').pack()
+                bg='#1a4d2e', fg='white').pack()
 
         # Canvas for dealer cards
-        self.dealer_canvas = tk.Canvas(dealer_frame, width=500, height=100,
-                                       bg='#0B6623', highlightthickness=0)
+        self.dealer_canvas = tk.Canvas(dealer_frame, width=500, height=110,
+                                       bg='#1a4d2e', highlightthickness=2, highlightbackground='gold')
         self.dealer_canvas.pack(pady=2)
 
         self.dealer_value_label = tk.Label(dealer_frame, text="Value: 0", font=('Arial', 12),
-                                          bg='#0B6623', fg='white')
+                                          bg='#1a4d2e', fg='white')
         self.dealer_value_label.pack()
 
         # Player section
-        player_frame = tk.Frame(game_frame, bg='#0B6623')
+        player_frame = tk.Frame(game_frame, bg='#1a4d2e')
         player_frame.pack(pady=2)
 
         tk.Label(player_frame, text="Your Hand", font=('Arial', 14, 'bold'),
-                bg='#0B6623', fg='white').pack()
+                bg='#1a4d2e', fg='white').pack()
 
         # Canvas for player cards
-        self.player_canvas = tk.Canvas(player_frame, width=500, height=120,
-                                       bg='#0B6623', highlightthickness=0)
+        self.player_canvas = tk.Canvas(player_frame, width=500, height=165,
+                                       bg='#1a4d2e', highlightthickness=2, highlightbackground='gold')
         self.player_canvas.pack(pady=2)
 
         self.player_value_label = tk.Label(player_frame, text="Value: 0", font=('Arial', 12),
-                                          bg='#0B6623', fg='white')
+                                          bg='#1a4d2e', fg='white')
         self.player_value_label.pack()
 
-        # Status message
-        status_frame = tk.Frame(game_frame, bg='#0B6623', height=60)
-        status_frame.pack(pady=5, fill=tk.X)
-        status_frame.pack_propagate(False)
+        # Status message - expandable area
+        status_frame = tk.Frame(game_frame, bg='#1a4d2e')
+        status_frame.pack(pady=5, fill=tk.BOTH, expand=True)
 
         self.status_label = tk.Label(status_frame, text="Place your bet to start!",
-                                    font=('Arial', 12, 'bold'), bg='#0B6623', fg='yellow',
+                                    font=('Arial', 12, 'bold'), bg='#1a4d2e', fg='yellow',
                                     wraplength=500, justify=tk.CENTER)
         self.status_label.pack(expand=True)
 
-        # Game action buttons
-        buttons_frame = tk.Frame(game_frame, bg='#0B6623')
-        buttons_frame.pack(pady=10)
+        # Game action buttons - at bottom
+        buttons_frame = tk.Frame(game_frame, bg='#1a4d2e')
+        buttons_frame.pack(side=tk.BOTTOM, pady=10)
 
         self.deal_button = tk.Button(buttons_frame, text="Deal", font=('Arial', 12, 'bold'),
                                      command=self.deal_cards, width=9, bg='green', fg='white')
@@ -675,7 +674,7 @@ class BlackjackMonteCarloGUI:
         player_second_dropdown.pack(side=tk.LEFT)
 
         # Auto-Simulator section
-        auto_sim_frame = tk.Frame(stats_frame, bg='#1a4d2e', relief=tk.RIDGE, bd=2)
+        auto_sim_frame = tk.Frame(stats_frame, bg='#1a4d2e')
         auto_sim_frame.pack(pady=5, padx=10, fill=tk.BOTH, expand=True)
 
         tk.Label(auto_sim_frame, text="Auto-Simulator", font=('Arial', 10, 'bold'),
@@ -754,7 +753,7 @@ class BlackjackMonteCarloGUI:
         self.safe_ranks_label.pack(pady=2, padx=15, fill=tk.X)
 
         # Expected Value Display
-        ev_frame = tk.Frame(left_stats_frame, bg='#1a4d2e', relief=tk.RIDGE, bd=2)
+        ev_frame = tk.Frame(left_stats_frame, bg='#1a4d2e')
         ev_frame.pack(pady=10, padx=10, fill=tk.X)
 
         # EV header with Show EV checkbox
@@ -1374,7 +1373,7 @@ class BlackjackMonteCarloGUI:
                 continue
 
             # Dealer upcard header
-            dealer_frame = tk.Frame(scrollable_frame, bg='#1a4d2e', relief=tk.RIDGE, bd=2)
+            dealer_frame = tk.Frame(scrollable_frame, bg='#1a4d2e')
             dealer_frame.pack(fill=tk.X, pady=5, padx=5)
 
             tk.Label(dealer_frame, text=f"Dealer Upcard: {dealer_upcard}", font=('Arial', 14, 'bold'),
@@ -1395,7 +1394,7 @@ class BlackjackMonteCarloGUI:
                 actions_data = sorted_data[dealer_upcard][player_hand]
 
                 # Create row for this player hand - using Text widget for better visibility
-                row_frame = tk.Frame(dealer_frame, bg='#1a4d2e', relief=tk.GROOVE, bd=1)
+                row_frame = tk.Frame(dealer_frame, bg='#1a4d2e')
                 row_frame.pack(fill=tk.X, padx=10, pady=3)
 
                 # Player hand label
@@ -1473,6 +1472,10 @@ class BlackjackMonteCarloGUI:
     def calculate_all_ev(self):
         """Calculate expected value for all possible actions"""
         if not self.game_in_progress or not self.show_ev.get():
+            return
+
+        # Safety check for valid hand index
+        if self.current_hand_index >= len(self.player_hands):
             return
 
         self.calc_ev_button.config(state=tk.DISABLED, text="Calculating...")
@@ -1858,14 +1861,21 @@ class BlackjackMonteCarloGUI:
                 img = self.create_card_image(card)
 
             self.card_images[f'dealer_{i}'] = img
-            self.dealer_canvas.create_image(x_offset + i * 65, 5, anchor=tk.NW, image=img)
+            self.dealer_canvas.create_image(x_offset + i * 72, 5, anchor=tk.NW, image=img)
 
         if self.dealer_hidden and len(self.dealer_hand.cards) > 0:
             dealer_value = self.dealer_hand.cards[0].value
+            dealer_value_text = f"Value: {dealer_value}"
         else:
             dealer_value = self.dealer_hand.value
+            # Show hard/soft for dealer
+            if self.dealer_hand.aces > 0:
+                hard_value = dealer_value - 10
+                dealer_value_text = f"Value: {hard_value}/{dealer_value} (Soft {dealer_value})"
+            else:
+                dealer_value_text = f"Value: {dealer_value}"
 
-        self.dealer_value_label.config(text=f"Value: {dealer_value}")
+        self.dealer_value_label.config(text=dealer_value_text)
 
         # Player display
         if len(self.player_hands) > 1:
@@ -1875,14 +1885,21 @@ class BlackjackMonteCarloGUI:
                 for i, card in enumerate(hand.cards):
                     img = self.create_card_image(card)
                     self.card_images[f'player_{hand_idx}_{i}'] = img
-                    self.player_canvas.create_image(x_offset + i * 65, y_offset, anchor=tk.NW, image=img)
+                    self.player_canvas.create_image(x_offset + i * 72, y_offset, anchor=tk.NW, image=img)
+
+                # Show hard/soft values for split hands
+                if hand.aces > 0:
+                    hard_value = hand.value - 10
+                    value_text = f"{hard_value}/{hand.value}"
+                else:
+                    value_text = str(hand.value)
 
                 marker = " ← ACTIVE" if hand_idx == self.current_hand_index else ""
-                self.player_canvas.create_text(x_offset + len(hand.cards) * 65 + 15, y_offset + 45,
-                                             text=f"Hand {hand_idx+1}: {hand.value}{marker}",
+                self.player_canvas.create_text(x_offset + len(hand.cards) * 72 + 15, y_offset + 50,
+                                             text=f"Hand {hand_idx+1}: {value_text}{marker}",
                                              fill='yellow' if hand_idx == self.current_hand_index else 'white',
                                              font=('Arial', 11, 'bold'), anchor=tk.W)
-                y_offset += 55
+                y_offset += 60
 
             self.player_value_label.config(text="")
         else:
@@ -1890,9 +1907,16 @@ class BlackjackMonteCarloGUI:
             for i, card in enumerate(self.player_hands[0].cards):
                 img = self.create_card_image(card)
                 self.card_images[f'player_0_{i}'] = img
-                self.player_canvas.create_image(x_offset + i * 65, 5, anchor=tk.NW, image=img)
+                self.player_canvas.create_image(x_offset + i * 72, 5, anchor=tk.NW, image=img)
 
-            self.player_value_label.config(text=f"Value: {self.player_hands[0].value}")
+            # Show hard/soft values for single hand
+            if self.player_hands[0].aces > 0:
+                hard_value = self.player_hands[0].value - 10
+                player_value_text = f"Value: {hard_value}/{self.player_hands[0].value} (Soft {self.player_hands[0].value})"
+            else:
+                player_value_text = f"Value: {self.player_hands[0].value}"
+
+            self.player_value_label.config(text=player_value_text)
 
         self.update_chips_display()
 
