@@ -708,6 +708,18 @@ class BlackjackMonteCarloGUI:
         self.auto_hands_entry.insert(0, "1000")
         self.auto_hands_entry.pack(side=tk.LEFT)
 
+        # Exploration mode checkbox
+        self.explore_all_actions = tk.BooleanVar(value=False)
+        explore_frame = tk.Frame(auto_sim_frame, bg='#1a4d2e')
+        explore_frame.pack(pady=3)
+
+        tk.Checkbutton(explore_frame, text="Explore All Actions", variable=self.explore_all_actions,
+                      font=('Arial', 8), bg='#1a4d2e', fg='white',
+                      selectcolor='#0B6623').pack()
+
+        tk.Label(explore_frame, text="(Slower but comprehensive EV data)", font=('Arial', 7),
+                bg='#1a4d2e', fg='#888888').pack()
+
         # Control buttons
         btn_frame = tk.Frame(auto_sim_frame, bg='#1a4d2e')
         btn_frame.pack(pady=3)
@@ -1214,22 +1226,100 @@ class BlackjackMonteCarloGUI:
         player_total = current_hand.value
         decision = self.basic_strategy_decision(current_hand, dealer_upcard_value)
 
-        # Store the decision for later tracking (before outcome is known)
-        if not hasattr(self, 'current_decision_data'):
-            self.current_decision_data = []
-
-        # Only track initial decisions (2-card hands)
-        if len(current_hand.cards) == 2:
-            # Identify if this is a soft hand
+        # Run Monte Carlo simulations for all possible actions and store EV data
+        # Only do this if "Explore All Actions" is enabled and for 2-card hands
+        if self.explore_all_actions.get() and len(current_hand.cards) == 2 and self.num_simulations > 0:
+            # Identify hand type - pairs first, then soft, then hard
+            is_pair = (len(current_hand.cards) == 2 and
+                      current_hand.cards[0].rank == current_hand.cards[1].rank)
             is_soft = current_hand.aces > 0
-            hand_label = f"S{player_total}" if is_soft else str(player_total)
 
-            self.current_decision_data.append({
-                'player_hand': hand_label,
-                'dealer_upcard': dealer_upcard_rank,
-                'action': decision,
-                'hand_index': self.current_hand_index
-            })
+            if is_pair:
+                hand_label = f"{current_hand.cards[0].rank}-{current_hand.cards[1].rank}"
+            elif is_soft:
+                hand_label = f"S{player_total}"
+            else:
+                hand_label = str(player_total)
+
+            # Create dealer upcard hand for simulation
+            dealer_upcard_hand = Hand()
+            dealer_upcard_hand.add_card(self.dealer_hand.cards[0].copy())
+
+            # Get all known cards (cards we can see)
+            known_cards = []
+            known_cards.extend(current_hand.cards)
+            known_cards.append(self.dealer_hand.cards[0])
+
+            # Try each possible action
+            actions_to_try = ['HIT', 'STAND']
+
+            # Can double on 2-card hands if we have enough chips
+            if self.chips >= self.current_bet:
+                actions_to_try.append('DOUBLE')
+
+            # Can split if pair and have enough chips
+            if (len(current_hand.cards) == 2 and
+                current_hand.cards[0].rank == current_hand.cards[1].rank and
+                self.chips >= self.current_bet):
+                actions_to_try.append('SPLIT')
+
+            # Run simulations for each action
+            for action in actions_to_try:
+                outcomes = []
+
+                for _ in range(min(self.num_simulations, 1000)):  # Limit to 1000 per action for speed
+                    # Create simulator with fresh deck for each simulation
+                    temp_simulator = MonteCarloSimulator(1)
+
+                    # Simulate the action
+                    if action == 'HIT':
+                        outcome = temp_simulator.simulate_hit(current_hand.copy(), dealer_upcard_hand,
+                                                             temp_simulator.create_fresh_deck(known_cards),
+                                                             self.current_bet)
+                    elif action == 'STAND':
+                        outcome = temp_simulator.simulate_stand(current_hand.copy(), dealer_upcard_hand,
+                                                               temp_simulator.create_fresh_deck(known_cards),
+                                                               self.current_bet)
+                    elif action == 'DOUBLE':
+                        outcome = temp_simulator.simulate_double(current_hand.copy(), dealer_upcard_hand,
+                                                                temp_simulator.create_fresh_deck(known_cards),
+                                                                self.current_bet)
+                    elif action == 'SPLIT':
+                        outcome = temp_simulator.simulate_split(current_hand.copy(), dealer_upcard_hand,
+                                                               temp_simulator.create_fresh_deck(known_cards),
+                                                               self.current_bet)
+
+                    outcomes.append(outcome)
+
+                # Store in EV data
+                key = (hand_label, dealer_upcard_rank, action)
+                if key not in self.auto_sim_ev_data:
+                    self.auto_sim_ev_data[key] = []
+                self.auto_sim_ev_data[key].extend(outcomes)
+        else:
+            # If not exploring all actions, just track the decision for later outcome recording
+            if len(current_hand.cards) == 2:
+                if not hasattr(self, 'current_decision_data'):
+                    self.current_decision_data = []
+
+                # Identify hand type - pairs first, then soft, then hard
+                is_pair = (len(current_hand.cards) == 2 and
+                          current_hand.cards[0].rank == current_hand.cards[1].rank)
+                is_soft = current_hand.aces > 0
+
+                if is_pair:
+                    hand_label = f"{current_hand.cards[0].rank}-{current_hand.cards[1].rank}"
+                elif is_soft:
+                    hand_label = f"S{player_total}"
+                else:
+                    hand_label = str(player_total)
+
+                self.current_decision_data.append({
+                    'player_hand': hand_label,
+                    'dealer_upcard': dealer_upcard_rank,
+                    'action': decision,
+                    'hand_index': self.current_hand_index
+                })
 
         if decision == 'STAND':
             self.current_hand_index += 1
@@ -1471,16 +1561,24 @@ class BlackjackMonteCarloGUI:
                 tk.Label(header_frame, text="Double EV", font=('Arial', 10, 'bold'),
                         bg='#0B6623', fg='#FF9800', width=20, anchor='w').grid(row=0, column=3, padx=2)
                 tk.Label(header_frame, text="Split EV", font=('Arial', 10, 'bold'),
-                        bg='#0B6623', fg='#9C27B0', width=20, anchor='w').grid(row=0, column=4, padx=2)
+                        bg='#0B6623', fg='#E91E63', width=20, anchor='w').grid(row=0, column=4, padx=2)
                 tk.Label(header_frame, text="Best", font=('Arial', 10, 'bold'),
                         bg='#0B6623', fg='yellow', width=8, anchor='w').grid(row=0, column=5, padx=2)
 
-                # Sort player hands
+                # Sort player hands: pairs first, then hard hands, then soft hands
                 def hand_sort_key(hand_str):
-                    if hand_str.startswith('S'):
-                        return (1, int(hand_str[1:]))
+                    if '-' in hand_str:
+                        # Pair - sort by card rank
+                        rank = hand_str.split('-')[0]
+                        # Convert rank to numeric value for sorting
+                        rank_order = {'A': 14, 'K': 13, 'Q': 12, 'J': 11, '10': 10, '9': 9, '8': 8, '7': 7, '6': 6, '5': 5, '4': 4, '3': 3, '2': 2}
+                        return (0, rank_order.get(rank, 0))
+                    elif hand_str.startswith('S'):
+                        # Soft hand - sort by numeric part
+                        return (2, int(hand_str[1:]))
                     else:
-                        return (0, int(hand_str))
+                        # Hard hand - sort numerically
+                        return (1, int(hand_str))
 
                 player_hands = sorted(sorted_data[dealer_upcard].keys(), key=hand_sort_key)
 
@@ -1497,7 +1595,7 @@ class BlackjackMonteCarloGUI:
                             bg='#1a4d2e', fg='white', width=8, anchor='w').grid(row=0, column=0, padx=2, sticky='w')
 
                     # Action columns
-                    action_colors = {'HIT': '#4CAF50', 'STAND': '#2196F3', 'DOUBLE': '#FF9800', 'SPLIT': '#9C27B0'}
+                    action_colors = {'HIT': '#4CAF50', 'STAND': '#2196F3', 'DOUBLE': '#FF9800', 'SPLIT': '#E91E63'}
                     evs = {}
 
                     for idx, action in enumerate(['HIT', 'STAND', 'DOUBLE', 'SPLIT'], start=1):
