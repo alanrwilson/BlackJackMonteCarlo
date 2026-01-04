@@ -233,12 +233,17 @@ class MonteCarloSimulator:
         hand1.add_card(player_hand.cards[0].copy())
         hand2.add_card(player_hand.cards[1].copy())
 
+        # Check if splitting aces
+        splitting_aces = player_hand.cards[0].rank == 'A'
+
         hand1.add_card(deck.deal())
         hand2.add_card(deck.deal())
 
-        # Play out both hands with basic strategy
-        hand1 = self.play_hand_optimally(hand1, dealer_upcard_value, deck)
-        hand2 = self.play_hand_optimally(hand2, dealer_upcard_value, deck)
+        # Split aces get one card only and cannot hit further
+        if not splitting_aces:
+            # Play out both hands with basic strategy (non-aces)
+            hand1 = self.play_hand_optimally(hand1, dealer_upcard_value, deck)
+            hand2 = self.play_hand_optimally(hand2, dealer_upcard_value, deck)
 
         # Complete dealer hand
         dealer_hand = dealer_upcard.copy()
@@ -353,16 +358,9 @@ class BlackjackMonteCarloGUI:
         self.filter_soft = tk.BooleanVar(value=False)
         self.filter_hard = tk.BooleanVar(value=False)
 
-        # Dealer upcard filter
-        self.filter_dealer_upcard = tk.BooleanVar(value=False)
+        # Card filters (using "Any" to disable)
         self.dealer_upcard_value = tk.StringVar(value="Any")
-
-        # Player upcard filter
-        self.filter_player_upcard = tk.BooleanVar(value=False)
         self.player_upcard_value = tk.StringVar(value="Any")
-
-        # Player second card filter
-        self.filter_player_second_card = tk.BooleanVar(value=False)
         self.player_second_card_value = tk.StringVar(value="Any")
 
         # Auto-simulator state
@@ -502,7 +500,7 @@ class BlackjackMonteCarloGUI:
         game_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
 
         # Right side - Monte Carlo Stats
-        stats_frame = tk.Frame(main_frame, bg='#1a4d2e', highlightbackground='gold', highlightthickness=2, width=450, height=635)
+        stats_frame = tk.Frame(main_frame, bg='#1a4d2e', highlightbackground='gold', highlightcolor='gold', highlightthickness=2, width=450, height=635)
         stats_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(10, 0))
         stats_frame.pack_propagate(False)
 
@@ -603,32 +601,35 @@ class BlackjackMonteCarloGUI:
         bet_amounts = [10, 25, 50, 100]
         for i, amount in enumerate(bet_amounts):
             btn = tk.Button(bet_row, text=f"${amount}", font=('Arial', 8),
-                          command=lambda a=amount: self.quick_bet(a), width=4)
+                          command=lambda a=amount: self.quick_bet(a), width=4,
+                          borderwidth=1, padx=1, pady=2)
             btn.pack(side=tk.LEFT, padx=1)
 
-        # Simulation settings
+        # Simulation settings - using grid for perfect alignment
         settings_frame = tk.Frame(stats_frame, bg='#1a4d2e')
         settings_frame.pack(pady=3, padx=10, fill=tk.X)
 
-        sim_row = tk.Frame(settings_frame, bg='#1a4d2e')
-        sim_row.pack(fill=tk.X)
+        row = 0
 
-        tk.Label(sim_row, text="EV Simulations:", font=('Arial', 9, 'bold'),
-                bg='#1a4d2e', fg='white').pack(side=tk.LEFT, padx=(0, 5))
+        # Simulations
+        tk.Label(settings_frame, text="Simulations:", font=('Arial', 9, 'bold'),
+                bg='#1a4d2e', fg='white', anchor='w').grid(row=row, column=0, sticky='w', padx=(0, 5), pady=2)
 
         sim_values = [0, 1000, 5000, 10000, 50000, 100000]
         self.sim_var = tk.IntVar(value=10000)
-        sim_dropdown = ttk.Combobox(sim_row, textvariable=self.sim_var,
+        sim_dropdown = ttk.Combobox(settings_frame, textvariable=self.sim_var,
                                    values=sim_values, state='readonly', width=10)
-        sim_dropdown.pack(side=tk.LEFT)
+        sim_dropdown.grid(row=row, column=1, sticky='w', pady=2)
         sim_dropdown.bind('<<ComboboxSelected>>', self.update_simulations)
+        row += 1
 
         # Hand category filters
         tk.Label(settings_frame, text="Hand Filters:", font=('Arial', 9, 'bold'),
-                bg='#1a4d2e', fg='white').pack(pady=(3, 2))
+                bg='#1a4d2e', fg='white', anchor='w').grid(row=row, column=0, columnspan=2, sticky='w', pady=(5, 2))
+        row += 1
 
         hand_filter_row = tk.Frame(settings_frame, bg='#1a4d2e')
-        hand_filter_row.pack(pady=3)
+        hand_filter_row.grid(row=row, column=0, columnspan=2, sticky='w', pady=3)
 
         tk.Checkbutton(hand_filter_row, text="Pairs", variable=self.filter_pairs,
                       font=('Arial', 8), bg='#1a4d2e', fg='white',
@@ -645,52 +646,43 @@ class BlackjackMonteCarloGUI:
         tk.Checkbutton(hand_filter_row, text="Hard", variable=self.filter_hard,
                       font=('Arial', 8), bg='#1a4d2e', fg='white',
                       selectcolor='#0B6623').pack(side=tk.LEFT, padx=2)
+        row += 1
 
-        # Dealer upcard filter - compact layout
+        # Section headers and dropdowns
         tk.Label(settings_frame, text="Dealer Upcard:", font=('Arial', 9, 'bold'),
-                bg='#1a4d2e', fg='white').pack(pady=(5, 2))
+                bg='#1a4d2e', fg='white', anchor='w').grid(row=row, column=0, columnspan=2, sticky='w', pady=(5, 2))
+        row += 1
 
-        dealer_frame = tk.Frame(settings_frame, bg='#1a4d2e')
-        dealer_frame.pack(pady=2, padx=10, fill=tk.X)
-
-        tk.Checkbutton(dealer_frame, text="Dealer:", variable=self.filter_dealer_upcard,
-                      font=('Arial', 9, 'bold'), bg='#1a4d2e', fg='white',
-                      selectcolor='#0B6623').pack(side=tk.LEFT, padx=(0, 5))
+        tk.Label(settings_frame, text="Dealer:", font=('Arial', 9, 'bold'),
+                bg='#1a4d2e', fg='white', anchor='w').grid(row=row, column=0, sticky='w', padx=(0, 5), pady=2)
 
         dealer_upcard_values = ['Any', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K']
-        dealer_dropdown = ttk.Combobox(dealer_frame, textvariable=self.dealer_upcard_value,
-                                      values=dealer_upcard_values, state='readonly', width=8)
-        dealer_dropdown.pack(side=tk.LEFT)
+        dealer_dropdown = ttk.Combobox(settings_frame, textvariable=self.dealer_upcard_value,
+                                      values=dealer_upcard_values, state='readonly', width=10)
+        dealer_dropdown.grid(row=row, column=1, sticky='w', pady=2)
+        row += 1
 
-        # Player cards section header
+        # Player cards section
         tk.Label(settings_frame, text="Player Cards:", font=('Arial', 9, 'bold'),
-                bg='#1a4d2e', fg='white').pack(pady=(5, 2))
+                bg='#1a4d2e', fg='white', anchor='w').grid(row=row, column=0, columnspan=2, sticky='w', pady=(5, 2))
+        row += 1
 
-        # Player first card - compact layout
-        player_first_frame = tk.Frame(settings_frame, bg='#1a4d2e')
-        player_first_frame.pack(pady=2, padx=10, fill=tk.X)
-
-        tk.Checkbutton(player_first_frame, text="1st:", variable=self.filter_player_upcard,
-                      font=('Arial', 9, 'bold'), bg='#1a4d2e', fg='white',
-                      selectcolor='#0B6623').pack(side=tk.LEFT, padx=(0, 5))
+        tk.Label(settings_frame, text="1st:", font=('Arial', 9, 'bold'),
+                bg='#1a4d2e', fg='white', anchor='w').grid(row=row, column=0, sticky='w', padx=(0, 5), pady=2)
 
         player_upcard_values = ['Any', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K']
-        player_dropdown = ttk.Combobox(player_first_frame, textvariable=self.player_upcard_value,
-                                      values=player_upcard_values, state='readonly', width=8)
-        player_dropdown.pack(side=tk.LEFT)
+        player_dropdown = ttk.Combobox(settings_frame, textvariable=self.player_upcard_value,
+                                      values=player_upcard_values, state='readonly', width=10)
+        player_dropdown.grid(row=row, column=1, sticky='w', pady=2)
+        row += 1
 
-        # Player second card - compact layout
-        player_second_frame = tk.Frame(settings_frame, bg='#1a4d2e')
-        player_second_frame.pack(pady=2, padx=10, fill=tk.X)
-
-        tk.Checkbutton(player_second_frame, text="2nd:", variable=self.filter_player_second_card,
-                      font=('Arial', 9, 'bold'), bg='#1a4d2e', fg='white',
-                      selectcolor='#0B6623').pack(side=tk.LEFT, padx=(0, 5))
+        tk.Label(settings_frame, text="2nd:", font=('Arial', 9, 'bold'),
+                bg='#1a4d2e', fg='white', anchor='w').grid(row=row, column=0, sticky='w', padx=(0, 5), pady=2)
 
         player_second_card_values = ['Any', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K']
-        player_second_dropdown = ttk.Combobox(player_second_frame, textvariable=self.player_second_card_value,
-                                      values=player_second_card_values, state='readonly', width=8)
-        player_second_dropdown.pack(side=tk.LEFT)
+        player_second_dropdown = ttk.Combobox(settings_frame, textvariable=self.player_second_card_value,
+                                      values=player_second_card_values, state='readonly', width=10)
+        player_second_dropdown.grid(row=row, column=1, sticky='w', pady=2)
 
         # Auto-Simulator section
         auto_sim_frame = tk.Frame(stats_frame, bg='#1a4d2e')
@@ -735,12 +727,12 @@ class BlackjackMonteCarloGUI:
 
         self.sim_progress_label = tk.Label(stats_display_frame, text="Ready",
                                           font=('Arial', 9, 'bold'), bg='#1a4d2e', fg='yellow')
-        self.sim_progress_label.pack(pady=2)
+        self.sim_progress_label.pack(pady=(2, 0))
 
         self.sim_stats_label = tk.Label(stats_display_frame, text="",
                                         font=('Arial', 8), bg='#1a4d2e', fg='white', justify=tk.LEFT,
-                                        wraplength=410)
-        self.sim_stats_label.pack(pady=2, fill=tk.BOTH, expand=True)
+                                        anchor='n', wraplength=410)
+        self.sim_stats_label.pack(pady=0, fill=tk.X)
 
         # Left sidebar - Card Analysis
         tk.Label(left_stats_frame, text="Card Analysis", font=('Arial', 18, 'bold'),
@@ -825,7 +817,7 @@ class BlackjackMonteCarloGUI:
             self.player_hands = [Hand()]
 
             # Deal player first card (with filter if enabled)
-            if self.filter_player_upcard.get() and self.player_upcard_value.get() != "Any":
+            if self.player_upcard_value.get() != "Any":
                 # Find a card matching the specified rank
                 target_rank = self.player_upcard_value.get()
                 player_card = None
@@ -846,7 +838,7 @@ class BlackjackMonteCarloGUI:
                 self.player_hands[0].add_card(self.deck.deal())
 
             # Deal dealer upcard (with filter if enabled)
-            if self.filter_dealer_upcard.get() and self.dealer_upcard_value.get() != "Any":
+            if self.dealer_upcard_value.get() != "Any":
                 # Find a card matching the specified rank
                 target_rank = self.dealer_upcard_value.get()
                 dealer_card = None
@@ -868,7 +860,7 @@ class BlackjackMonteCarloGUI:
                 self.dealer_hand.add_card(self.deck.deal())
 
             # Deal player second card (with filter if enabled)
-            if self.filter_player_second_card.get() and self.player_second_card_value.get() != "Any":
+            if self.player_second_card_value.get() != "Any":
                 # Find a card matching the specified rank
                 target_rank = self.player_second_card_value.get()
                 player_card_2 = None
@@ -1206,6 +1198,16 @@ class BlackjackMonteCarloGUI:
             self.root.after(10, self.auto_play_hand)
             return
 
+        # Check if this is a split ace hand (has 2 cards with first card being an ace)
+        is_split_ace = (self.has_split and len(current_hand.cards) == 2 and
+                       current_hand.cards[0].rank == 'A')
+
+        # Split aces get one card only and automatically stand
+        if is_split_ace:
+            self.current_hand_index += 1
+            self.root.after(10, self.auto_play_hand)
+            return
+
         # Get basic strategy decision
         dealer_upcard_value = self.dealer_hand.cards[0].value
         dealer_upcard_rank = self.dealer_hand.cards[0].rank
@@ -1251,9 +1253,16 @@ class BlackjackMonteCarloGUI:
                 new_hand = Hand()
 
                 second_card = original_hand.cards.pop()
-                original_hand.value -= second_card.value
-                if second_card.rank == 'A':
-                    original_hand.aces -= 1
+
+                # Recalculate original hand value from remaining cards
+                original_hand.value = 0
+                original_hand.aces = 0
+                for card in original_hand.cards:
+                    original_hand.value += card.value
+                    if card.rank == 'A':
+                        original_hand.aces += 1
+                original_hand.adjust_for_ace()
+
                 new_hand.add_card(second_card)
 
                 original_hand.add_card(self.deck.deal())
@@ -1354,12 +1363,35 @@ class BlackjackMonteCarloGUI:
         # Create new window
         results_window = tk.Toplevel(self.root)
         results_window.title("Auto-Simulator EV Results")
-        results_window.geometry("1200x700")
+        results_window.geometry("1400x750")
         results_window.configure(bg='#0B6623')
 
         # Title
         tk.Label(results_window, text="Expected Value Analysis", font=('Arial', 18, 'bold'),
                 bg='#0B6623', fg='white').pack(pady=10)
+
+        # Filter and Summary section
+        filter_summary_frame = tk.Frame(results_window, bg='#1a4d2e', highlightbackground='gold', highlightthickness=2)
+        filter_summary_frame.pack(pady=5, padx=10, fill=tk.X)
+
+        # Filter row
+        filter_row = tk.Frame(filter_summary_frame, bg='#1a4d2e')
+        filter_row.pack(pady=5, padx=10)
+
+        tk.Label(filter_row, text="Filter by Dealer Card:", font=('Arial', 11, 'bold'),
+                bg='#1a4d2e', fg='white').pack(side=tk.LEFT, padx=(0, 10))
+
+        dealer_filter_var = tk.StringVar(value="All")
+        dealer_filter_values = ['All', 'A', '2', '3', '4', '5', '6', '7', '8', '9', '10']
+        dealer_filter_dropdown = ttk.Combobox(filter_row, textvariable=dealer_filter_var,
+                                             values=dealer_filter_values, state='readonly', width=10)
+        dealer_filter_dropdown.pack(side=tk.LEFT)
+
+        # Summary stats
+        total_decisions = len(self.auto_sim_ev_data)
+        summary_label = tk.Label(filter_summary_frame, text=f"Total Unique Situations: {total_decisions}",
+                                font=('Arial', 11, 'bold'), bg='#1a4d2e', fg='white')
+        summary_label.pack(pady=5)
 
         # Create frame with scrollbar
         main_frame = tk.Frame(results_window, bg='#0B6623')
@@ -1378,85 +1410,122 @@ class BlackjackMonteCarloGUI:
         canvas.create_window((0, 0), window=scrollable_frame, anchor=tk.NW)
         canvas.configure(yscrollcommand=scrollbar.set)
 
-        # Process and sort data by dealer upcard then player hand
-        sorted_data = {}
-        for (player_hand, dealer_upcard, action), outcomes in self.auto_sim_ev_data.items():
-            if dealer_upcard not in sorted_data:
-                sorted_data[dealer_upcard] = {}
-            if player_hand not in sorted_data[dealer_upcard]:
-                sorted_data[dealer_upcard][player_hand] = {}
+        # Function to refresh the display based on filter
+        def refresh_display(*args):
+            # Clear existing content
+            for widget in scrollable_frame.winfo_children():
+                widget.destroy()
 
-            avg_ev = sum(outcomes) / len(outcomes)
-            wins = sum(1 for x in outcomes if x > 0)
-            losses = sum(1 for x in outcomes if x < 0)
-            pushes = sum(1 for x in outcomes if x == 0)
+            # Process and sort data by dealer upcard then player hand
+            sorted_data = {}
+            for (player_hand, dealer_upcard, action), outcomes in self.auto_sim_ev_data.items():
+                if dealer_upcard not in sorted_data:
+                    sorted_data[dealer_upcard] = {}
+                if player_hand not in sorted_data[dealer_upcard]:
+                    sorted_data[dealer_upcard][player_hand] = {}
 
-            sorted_data[dealer_upcard][player_hand][action] = {
-                'ev': avg_ev,
-                'count': len(outcomes),
-                'wins': wins,
-                'losses': losses,
-                'pushes': pushes
-            }
+                avg_ev = sum(outcomes) / len(outcomes)
+                wins = sum(1 for x in outcomes if x > 0)
+                losses = sum(1 for x in outcomes if x < 0)
+                pushes = sum(1 for x in outcomes if x == 0)
 
-        # Display results grouped by dealer upcard
-        dealer_order = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10']
+                sorted_data[dealer_upcard][player_hand][action] = {
+                    'ev': avg_ev,
+                    'count': len(outcomes),
+                    'wins': wins,
+                    'losses': losses,
+                    'pushes': pushes
+                }
 
-        for dealer_upcard in dealer_order:
-            if dealer_upcard not in sorted_data:
-                continue
+            # Get selected filter
+            selected_dealer = dealer_filter_var.get()
 
-            # Dealer upcard header
-            dealer_frame = tk.Frame(scrollable_frame, bg='#1a4d2e')
-            dealer_frame.pack(fill=tk.X, pady=5, padx=5)
+            # Display results grouped by dealer upcard
+            dealer_order = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10']
 
-            tk.Label(dealer_frame, text=f"Dealer Upcard: {dealer_upcard}", font=('Arial', 14, 'bold'),
-                    bg='#1a4d2e', fg='yellow').pack(pady=5)
+            for dealer_upcard in dealer_order:
+                # Skip if not in data or filtered out
+                if dealer_upcard not in sorted_data:
+                    continue
+                if selected_dealer != "All" and dealer_upcard != selected_dealer:
+                    continue
 
-            # Sort player hands: hard hands (numeric) first, then soft hands (S prefix)
-            def hand_sort_key(hand_str):
-                if hand_str.startswith('S'):
-                    # Soft hand - sort by numeric part, put after hard hands
-                    return (1, int(hand_str[1:]))
-                else:
-                    # Hard hand - sort numerically, put before soft hands
-                    return (0, int(hand_str))
+                # Dealer upcard section
+                dealer_frame = tk.Frame(scrollable_frame, bg='#1a4d2e', highlightbackground='gold', highlightthickness=2)
+                dealer_frame.pack(fill=tk.X, pady=8, padx=5)
 
-            player_hands = sorted(sorted_data[dealer_upcard].keys(), key=hand_sort_key)
+                # Dealer header
+                tk.Label(dealer_frame, text=f"━━━ Dealer Shows: {dealer_upcard} ━━━", font=('Arial', 15, 'bold'),
+                        bg='#1a4d2e', fg='#FFD700').pack(pady=8)
 
-            for player_hand in player_hands:
-                actions_data = sorted_data[dealer_upcard][player_hand]
+                # Table header
+                header_frame = tk.Frame(dealer_frame, bg='#0B6623')
+                header_frame.pack(fill=tk.X, padx=10, pady=(0, 5))
 
-                # Create row for this player hand - using Text widget for better visibility
-                row_frame = tk.Frame(dealer_frame, bg='#1a4d2e')
-                row_frame.pack(fill=tk.X, padx=10, pady=3)
+                tk.Label(header_frame, text="Hand", font=('Arial', 10, 'bold'),
+                        bg='#0B6623', fg='white', width=8, anchor='w').grid(row=0, column=0, padx=2)
+                tk.Label(header_frame, text="Hit EV", font=('Arial', 10, 'bold'),
+                        bg='#0B6623', fg='#4CAF50', width=20, anchor='w').grid(row=0, column=1, padx=2)
+                tk.Label(header_frame, text="Stand EV", font=('Arial', 10, 'bold'),
+                        bg='#0B6623', fg='#2196F3', width=20, anchor='w').grid(row=0, column=2, padx=2)
+                tk.Label(header_frame, text="Double EV", font=('Arial', 10, 'bold'),
+                        bg='#0B6623', fg='#FF9800', width=20, anchor='w').grid(row=0, column=3, padx=2)
+                tk.Label(header_frame, text="Split EV", font=('Arial', 10, 'bold'),
+                        bg='#0B6623', fg='#9C27B0', width=20, anchor='w').grid(row=0, column=4, padx=2)
+                tk.Label(header_frame, text="Best", font=('Arial', 10, 'bold'),
+                        bg='#0B6623', fg='yellow', width=8, anchor='w').grid(row=0, column=5, padx=2)
 
-                # Player hand label
-                tk.Label(row_frame, text=f"Player {player_hand}:", font=('Arial', 12, 'bold'),
-                        bg='#1a4d2e', fg='white').pack(side=tk.LEFT, padx=5, pady=5)
+                # Sort player hands
+                def hand_sort_key(hand_str):
+                    if hand_str.startswith('S'):
+                        return (1, int(hand_str[1:]))
+                    else:
+                        return (0, int(hand_str))
 
-                # Action EVs - display each on same row
-                action_colors = {'HIT': '#4CAF50', 'STAND': '#2196F3', 'DOUBLE': '#FF9800', 'SPLIT': '#FF00FF'}
+                player_hands = sorted(sorted_data[dealer_upcard].keys(), key=hand_sort_key)
 
-                action_container = tk.Frame(row_frame, bg='#1a4d2e')
-                action_container.pack(side=tk.LEFT, fill=tk.X, expand=True)
+                # Display each hand
+                for player_hand in player_hands:
+                    actions_data = sorted_data[dealer_upcard][player_hand]
 
-                for action in ['HIT', 'STAND', 'DOUBLE', 'SPLIT']:
-                    if action in actions_data:
-                        ev = actions_data[action]['ev']
-                        count = actions_data[action]['count']
-                        wins = actions_data[action]['wins']
-                        losses = actions_data[action]['losses']
-                        pushes = actions_data[action]['pushes']
+                    # Create row
+                    row_frame = tk.Frame(dealer_frame, bg='#1a4d2e')
+                    row_frame.pack(fill=tk.X, padx=10, pady=2)
 
-                        text = f"{action}: ${ev:+.2f} ({wins}W-{losses}L-{pushes}P)"
+                    # Player hand label
+                    tk.Label(row_frame, text=player_hand, font=('Arial', 11, 'bold'),
+                            bg='#1a4d2e', fg='white', width=8, anchor='w').grid(row=0, column=0, padx=2, sticky='w')
 
-                        action_label = tk.Label(action_container,
-                                              text=text,
-                                              font=('Arial', 11, 'bold'), bg='#1a4d2e',
-                                              fg=action_colors.get(action, 'white'),
-                                              anchor='w', padx=10)
-                        action_label.pack(side=tk.LEFT, pady=5)
+                    # Action columns
+                    action_colors = {'HIT': '#4CAF50', 'STAND': '#2196F3', 'DOUBLE': '#FF9800', 'SPLIT': '#9C27B0'}
+                    evs = {}
+
+                    for idx, action in enumerate(['HIT', 'STAND', 'DOUBLE', 'SPLIT'], start=1):
+                        if action in actions_data:
+                            ev = actions_data[action]['ev']
+                            wins = actions_data[action]['wins']
+                            losses = actions_data[action]['losses']
+                            pushes = actions_data[action]['pushes']
+                            evs[action] = ev
+
+                            text = f"${ev:+.2f} ({wins}W-{losses}L-{pushes}P)"
+                            tk.Label(row_frame, text=text, font=('Arial', 10),
+                                    bg='#1a4d2e', fg=action_colors[action], width=20, anchor='w').grid(row=0, column=idx, padx=2, sticky='w')
+                        else:
+                            tk.Label(row_frame, text="—", font=('Arial', 10),
+                                    bg='#1a4d2e', fg='#666666', width=20, anchor='w').grid(row=0, column=idx, padx=2, sticky='w')
+
+                    # Best action
+                    if evs:
+                        best_action = max(evs, key=evs.get)
+                        tk.Label(row_frame, text=best_action, font=('Arial', 11, 'bold'),
+                                bg='#1a4d2e', fg='yellow', width=8, anchor='w').grid(row=0, column=5, padx=2, sticky='w')
+
+        # Bind filter change to refresh function
+        dealer_filter_dropdown.bind('<<ComboboxSelected>>', refresh_display)
+
+        # Initial display
+        refresh_display()
 
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
@@ -1801,10 +1870,20 @@ class BlackjackMonteCarloGUI:
 
             # Move second card to new hand
             second_card = original_hand.cards.pop()
-            original_hand.value -= second_card.value
-            if second_card.rank == 'A':
-                original_hand.aces -= 1
+
+            # Recalculate original hand value from remaining cards
+            original_hand.value = 0
+            original_hand.aces = 0
+            for card in original_hand.cards:
+                original_hand.value += card.value
+                if card.rank == 'A':
+                    original_hand.aces += 1
+            original_hand.adjust_for_ace()
+
             new_hand.add_card(second_card)
+
+            # Check if splitting aces (before dealing new cards)
+            splitting_aces = second_card.rank == 'A'
 
             # Deal new cards to both hands
             original_hand.add_card(self.deck.deal())
@@ -1815,26 +1894,35 @@ class BlackjackMonteCarloGUI:
 
             self.split_button.config(state=tk.DISABLED)
 
-            # Enable double down if player has enough chips (allowing double after split)
-            if self.chips >= self.current_bet:
-                self.double_button.config(state=tk.NORMAL)
-            else:
-                self.double_button.config(state=tk.DISABLED)
-
             self.update_display()
 
-            # Check if first hand after split has 21
-            current_hand = self.player_hands[self.current_hand_index]
-            if current_hand.value == 21:
+            # Special rule: Split aces get one card only and cannot hit
+            if splitting_aces:
                 self.hit_button.config(state=tk.DISABLED)
                 self.double_button.config(state=tk.DISABLED)
-                self.status_label.config(text=f"Hand split! Hand {self.current_hand_index + 1} has 21! (Hit Stand to continue)")
+                self.status_label.config(text=f"Aces split! Each hand gets one card. (Hit Stand to continue)")
+                # Recalculate EV if enabled and simulations > 0
+                if self.show_ev.get() and self.num_simulations > 0:
+                    self.root.after(100, self.calculate_all_ev)
             else:
-                self.status_label.config(text=f"Hand split! Playing hand {self.current_hand_index + 1}")
+                # Enable double down if player has enough chips (allowing double after split)
+                if self.chips >= self.current_bet:
+                    self.double_button.config(state=tk.NORMAL)
+                else:
+                    self.double_button.config(state=tk.DISABLED)
 
-            # Recalculate EV if enabled and simulations > 0
-            if self.show_ev.get() and self.num_simulations > 0:
-                self.root.after(100, self.calculate_all_ev)
+                # Check if first hand after split has 21
+                current_hand = self.player_hands[self.current_hand_index]
+                if current_hand.value == 21:
+                    self.hit_button.config(state=tk.DISABLED)
+                    self.double_button.config(state=tk.DISABLED)
+                    self.status_label.config(text=f"Hand split! Hand {self.current_hand_index + 1} has 21! (Hit Stand to continue)")
+                else:
+                    self.status_label.config(text=f"Hand split! Playing hand {self.current_hand_index + 1}")
+
+                # Recalculate EV if enabled and simulations > 0
+                if self.show_ev.get() and self.num_simulations > 0:
+                    self.root.after(100, self.calculate_all_ev)
 
     def next_hand_or_dealer(self):
         """Move to next hand or dealer's turn"""
@@ -1844,23 +1932,33 @@ class BlackjackMonteCarloGUI:
             # Play next hand
             current_hand = self.player_hands[self.current_hand_index]
 
-            # Enable double down if player has enough chips and hand has exactly 2 cards
-            if self.chips >= self.current_bet and len(current_hand.cards) == 2:
-                self.double_button.config(state=tk.NORMAL)
-            else:
+            # Check if this is a split ace hand (has 2 cards with first card being an ace)
+            is_split_ace = (self.has_split and len(current_hand.cards) == 2 and
+                           current_hand.cards[0].rank == 'A')
+
+            if is_split_ace:
+                # Split aces cannot hit or double
+                self.hit_button.config(state=tk.DISABLED)
                 self.double_button.config(state=tk.DISABLED)
+                self.status_label.config(text=f"Hand {self.current_hand_index + 1} (Split Ace): {current_hand.value} (Hit Stand to continue)")
+            else:
+                # Enable double down if player has enough chips and hand has exactly 2 cards
+                if self.chips >= self.current_bet and len(current_hand.cards) == 2:
+                    self.double_button.config(state=tk.NORMAL)
+                else:
+                    self.double_button.config(state=tk.DISABLED)
+
+                # Check if this hand already has 21
+                if current_hand.value == 21:
+                    self.hit_button.config(state=tk.DISABLED)
+                    self.double_button.config(state=tk.DISABLED)
+                    self.status_label.config(text=f"Hand {self.current_hand_index + 1} has 21! (Hit Stand to continue)")
+                else:
+                    self.status_label.config(text=f"Playing hand {self.current_hand_index + 1}")
 
             self.split_button.config(state=tk.DISABLED)
 
             self.update_display()
-
-            # Check if this hand already has 21
-            if current_hand.value == 21:
-                self.hit_button.config(state=tk.DISABLED)
-                self.double_button.config(state=tk.DISABLED)
-                self.status_label.config(text=f"Hand {self.current_hand_index + 1} has 21! (Hit Stand to continue)")
-            else:
-                self.status_label.config(text=f"Playing hand {self.current_hand_index + 1}")
 
             # Recalculate EV for new hand if enabled and simulations > 0
             if self.show_ev.get() and self.num_simulations > 0:
