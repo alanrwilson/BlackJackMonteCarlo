@@ -122,8 +122,9 @@ class Hand:
 class MonteCarloSimulator:
     """Simulates blackjack outcomes using Monte Carlo method"""
 
-    def __init__(self, num_simulations=10000):
+    def __init__(self, num_simulations=10000, use_depleting_shoe=False):
         self.num_simulations = num_simulations
+        self.use_depleting_shoe = use_depleting_shoe
 
     def create_fresh_deck(self, known_cards):
         """Create a deck with known cards removed"""
@@ -145,6 +146,36 @@ class MonteCarloSimulator:
         deck.num_decks = 1
         deck.initial_card_count = 52
         deck.cards = all_cards
+        return deck
+
+    def create_deck_from_shoe(self, actual_deck, known_cards):
+        """Create a simulation deck from actual remaining shoe cards
+
+        Args:
+            actual_deck: The real game deck (potentially multi-deck shoe)
+            known_cards: Visible cards to remove (player cards + dealer upcard)
+
+        Returns:
+            Deck object with actual remaining cards minus known cards
+        """
+        # Start with ALL remaining cards from actual shoe
+        remaining_cards = [card.copy() for card in actual_deck.cards]
+
+        # Remove known visible cards
+        for known_card in known_cards:
+            for i, card in enumerate(remaining_cards):
+                if card.suit == known_card.suit and card.rank == known_card.rank:
+                    remaining_cards.pop(i)
+                    break
+
+        # Shuffle
+        random.shuffle(remaining_cards)
+
+        # Create deck object preserving multi-deck properties
+        deck = Deck.__new__(Deck)
+        deck.num_decks = actual_deck.num_decks
+        deck.initial_card_count = actual_deck.initial_card_count
+        deck.cards = remaining_cards
         return deck
 
     def simulate_dealer(self, dealer_hand, deck):
@@ -293,8 +324,18 @@ class MonteCarloSimulator:
         else:
             return 0  # Push
 
-    def calculate_expected_value(self, action, player_hand, dealer_upcard, known_cards, bet, cancel_flag=None):
-        """Calculate expected value for a specific action and return EV with W-L-P stats"""
+    def calculate_expected_value(self, action, player_hand, dealer_upcard, known_cards, bet, cancel_flag=None, actual_deck=None):
+        """Calculate expected value for a specific action and return EV with W-L-P stats
+
+        Args:
+            action: Action to evaluate (HIT, STAND, DOUBLE, SPLIT)
+            player_hand: Player's hand
+            dealer_upcard: Dealer's upcard
+            known_cards: List of known visible cards
+            bet: Current bet amount
+            cancel_flag: Optional flag to cancel calculation
+            actual_deck: Optional - the real game deck for depleting shoe mode
+        """
         # Handle 0 simulations case
         if self.num_simulations == 0:
             return {
@@ -314,8 +355,11 @@ class MonteCarloSimulator:
             if cancel_flag and cancel_flag():
                 return None
 
-            # Create fresh deck for each simulation
-            deck = self.create_fresh_deck(known_cards)
+            # Choose deck creation method based on mode
+            if self.use_depleting_shoe and actual_deck is not None:
+                deck = self.create_deck_from_shoe(actual_deck, known_cards)
+            else:
+                deck = self.create_fresh_deck(known_cards)
 
             if action == "HIT":
                 outcome = self.simulate_hit(player_hand, dealer_upcard, deck, bet)
@@ -376,7 +420,7 @@ class BlackjackMonteCarloGUI:
 
         # Simulation settings
         self.num_simulations = 10000
-        self.simulator = MonteCarloSimulator(self.num_simulations)
+        self.simulator = MonteCarloSimulator(self.num_simulations, use_depleting_shoe=False)
         self.show_ev = tk.BooleanVar(value=True)
 
         # Hand category filters
@@ -653,6 +697,19 @@ class BlackjackMonteCarloGUI:
         sim_dropdown.bind('<<ComboboxSelected>>', self.update_simulations)
         row += 1
 
+        # EV Deck Mode
+        tk.Label(settings_frame, text="EV Calculation:", font=('Arial', 9, 'bold'),
+                bg='#1a4d2e', fg='white', anchor='w').grid(row=row, column=0, sticky='w',
+                                                            padx=(0, 5), pady=2)
+
+        self.ev_deck_mode = tk.StringVar(value="Fresh Deck")
+        deck_mode_values = ["Fresh Deck", "Depleting Shoe"]
+        deck_mode_dropdown = ttk.Combobox(settings_frame, textvariable=self.ev_deck_mode,
+                                         values=deck_mode_values, state='readonly', width=10)
+        deck_mode_dropdown.grid(row=row, column=1, sticky='w', pady=2)
+        deck_mode_dropdown.bind('<<ComboboxSelected>>', self.update_deck_mode)
+        row += 1
+
         # Hand category filters
         tk.Label(settings_frame, text="Hand Filters:", font=('Arial', 9, 'bold'),
                 bg='#1a4d2e', fg='white', anchor='w').grid(row=row, column=0, columnspan=2, sticky='w', pady=(5, 2))
@@ -739,7 +796,7 @@ class BlackjackMonteCarloGUI:
         self.auto_hands_entry.pack(side=tk.LEFT)
 
         # Exploration mode checkbox
-        self.explore_all_actions = tk.BooleanVar(value=False)
+        self.explore_all_actions = tk.BooleanVar(value=True)
         explore_frame = tk.Frame(auto_sim_frame, bg='#1a4d2e')
         explore_frame.pack(pady=3)
 
@@ -869,9 +926,10 @@ class BlackjackMonteCarloGUI:
         tk.Label(ev_header_frame, text="Expected Value ($)", font=('Arial', 13, 'bold'),
                 bg='#1a4d2e', fg='white').pack(side=tk.LEFT, padx=(5, 10))
 
-        tk.Checkbutton(ev_header_frame, text="Show", variable=self.show_ev,
-                      font=('Arial', 9), bg='#1a4d2e', fg='white',
-                      selectcolor='#0B6623', command=self.update_ev_display).pack(side=tk.LEFT)
+        # Add mode indicator label
+        self.ev_mode_indicator = tk.Label(ev_header_frame, text="[Fresh]",
+                                         font=('Arial', 8), bg='#1a4d2e', fg='#FFD700')
+        self.ev_mode_indicator.pack(side=tk.LEFT, padx=5)
 
         # EV for each action
         self.ev_labels = {}
@@ -1090,12 +1148,35 @@ class BlackjackMonteCarloGUI:
             if self.game_in_progress:
                 self.calc_ev_button.config(state=tk.NORMAL)
 
-    def update_ev_display(self):
-        """Toggle EV display"""
-        if not self.show_ev.get():
-            for label in self.ev_labels.values():
-                label.config(text="N/A")
-            self.best_action_label.config(text="")
+    def update_deck_mode(self, event=None):
+        """Update EV calculation deck mode"""
+        mode = self.ev_deck_mode.get()
+
+        # Update simulator mode
+        use_depleting = (mode == "Depleting Shoe")
+        self.simulator.use_depleting_shoe = use_depleting
+
+        # Clear current EV display to indicate recalculation needed
+        for label in self.ev_labels.values():
+            label.config(text="N/A")
+        self.best_action_label.config(text="")
+
+        # Update mode indicator if it exists
+        if hasattr(self, 'ev_mode_indicator'):
+            if use_depleting:
+                self.ev_mode_indicator.config(text="[Shoe]", fg='#FF5722')
+            else:
+                self.ev_mode_indicator.config(text="[Fresh]", fg='#FFD700')
+
+        # Update status message
+        if use_depleting:
+            self.status_label.config(text=f"EV mode: Depleting Shoe (uses {self.deck.num_decks}-deck shoe state)")
+        else:
+            self.status_label.config(text="EV mode: Fresh Deck (basic strategy)")
+
+        # Auto-recalculate if game in progress
+        if self.game_in_progress and self.show_ev.get() and self.num_simulations > 0:
+            self.root.after(100, self.calculate_all_ev)
 
     def basic_strategy_decision(self, player_hand, dealer_upcard_value):
         """Make decision based on basic blackjack strategy"""
@@ -1243,7 +1324,11 @@ class BlackjackMonteCarloGUI:
         self.chips -= bet_amount
 
         # Check if reshuffle needed
-        if self.deck.reshuffle_needed():
+        # In Fresh Deck mode, reshuffle after every hand (simulate infinite deck)
+        # In Depleting Shoe mode, only reshuffle when shoe is depleted
+        if self.ev_deck_mode.get() == "Fresh Deck":
+            self.reshuffle_shoe()
+        elif self.deck.reshuffle_needed():
             self.reshuffle_shoe()
 
         # Reset game state (but NOT the deck!)
@@ -1371,27 +1456,32 @@ class BlackjackMonteCarloGUI:
             for action in actions_to_try:
                 outcomes = []
 
+                # Check if using depleting shoe mode
+                use_depleting = (self.ev_deck_mode.get() == "Depleting Shoe")
+
                 for _ in range(min(self.num_simulations, 1000)):  # Limit to 1000 per action for speed
-                    # Create simulator with fresh deck for each simulation
+                    # Create simulator
                     temp_simulator = MonteCarloSimulator(1)
+
+                    # Get deck based on mode
+                    if use_depleting:
+                        sim_deck = temp_simulator.create_deck_from_shoe(self.deck, known_cards)
+                    else:
+                        sim_deck = temp_simulator.create_fresh_deck(known_cards)
 
                     # Simulate the action
                     if action == 'HIT':
                         outcome = temp_simulator.simulate_hit(current_hand.copy(), dealer_upcard_hand,
-                                                             temp_simulator.create_fresh_deck(known_cards),
-                                                             self.current_bet)
+                                                             sim_deck, self.current_bet)
                     elif action == 'STAND':
                         outcome = temp_simulator.simulate_stand(current_hand.copy(), dealer_upcard_hand,
-                                                               temp_simulator.create_fresh_deck(known_cards),
-                                                               self.current_bet)
+                                                               sim_deck, self.current_bet)
                     elif action == 'DOUBLE':
                         outcome = temp_simulator.simulate_double(current_hand.copy(), dealer_upcard_hand,
-                                                                temp_simulator.create_fresh_deck(known_cards),
-                                                                self.current_bet)
+                                                                sim_deck, self.current_bet)
                     elif action == 'SPLIT':
                         outcome = temp_simulator.simulate_split(current_hand.copy(), dealer_upcard_hand,
-                                                               temp_simulator.create_fresh_deck(known_cards),
-                                                               self.current_bet)
+                                                               sim_deck, self.current_bet)
 
                     outcomes.append(outcome)
 
@@ -1543,15 +1633,12 @@ class BlackjackMonteCarloGUI:
                         self.auto_sim_ev_data[key] = []
                     self.auto_sim_ev_data[key].append(hand_outcomes[hand_idx])
 
-        # Update stats based on overall hand result
-        if won_hands > lost_hands:
-            self.auto_sim_wins += 1
-        elif lost_hands > won_hands:
-            self.auto_sim_losses += 1
-        else:
-            self.auto_sim_pushes += 1
+        # Update stats - count each hand separately (important for splits)
+        self.auto_sim_wins += won_hands
+        self.auto_sim_losses += lost_hands
+        self.auto_sim_pushes += push_hands
 
-        self.auto_sim_hands_played += 1
+        self.auto_sim_hands_played += 1  # Count number of deals (not individual split hands)
         self.update_auto_stats()
         self.game_in_progress = False
 
@@ -1912,6 +1999,10 @@ class BlackjackMonteCarloGUI:
         if self.current_hand_index >= len(self.player_hands):
             return
 
+        # Safety check for dealer hand
+        if not self.dealer_hand or len(self.dealer_hand.cards) == 0:
+            return
+
         # Cancel any ongoing calculation
         self.cancel_ev_calculation_if_running()
 
@@ -1944,7 +2035,8 @@ class BlackjackMonteCarloGUI:
             # Calculate EV for Hit
             result_hit = self.simulator.calculate_expected_value(
                 "HIT", current_hand, visible_dealer_hand, known_cards, self.current_bet,
-                cancel_flag=lambda: self.cancel_ev_calculation)
+                cancel_flag=lambda: self.cancel_ev_calculation,
+                actual_deck=self.deck)
             if result_hit is not None:
                 results['HIT'] = result_hit
 
@@ -1952,7 +2044,8 @@ class BlackjackMonteCarloGUI:
             if not self.cancel_ev_calculation:
                 result_stand = self.simulator.calculate_expected_value(
                     "STAND", current_hand, visible_dealer_hand, known_cards, self.current_bet,
-                    cancel_flag=lambda: self.cancel_ev_calculation)
+                    cancel_flag=lambda: self.cancel_ev_calculation,
+                    actual_deck=self.deck)
                 if result_stand is not None:
                     results['STAND'] = result_stand
 
@@ -1960,7 +2053,8 @@ class BlackjackMonteCarloGUI:
             if can_double and not self.cancel_ev_calculation:
                 result_double = self.simulator.calculate_expected_value(
                     "DOUBLE", current_hand, visible_dealer_hand, known_cards, self.current_bet,
-                    cancel_flag=lambda: self.cancel_ev_calculation)
+                    cancel_flag=lambda: self.cancel_ev_calculation,
+                    actual_deck=self.deck)
                 if result_double is not None:
                     results['DOUBLE'] = result_double
 
@@ -1968,7 +2062,8 @@ class BlackjackMonteCarloGUI:
             if can_split and not self.cancel_ev_calculation:
                 result_split = self.simulator.calculate_expected_value(
                     "SPLIT", current_hand, visible_dealer_hand, known_cards, self.current_bet,
-                    cancel_flag=lambda: self.cancel_ev_calculation)
+                    cancel_flag=lambda: self.cancel_ev_calculation,
+                    actual_deck=self.deck)
                 if result_split is not None:
                     results['SPLIT'] = result_split
 
@@ -2492,6 +2587,10 @@ class BlackjackMonteCarloGUI:
 
     def update_count(self, card):
         """Update running count based on Hi-Lo system"""
+        # Don't count cards in Fresh Deck mode (infinite deck simulation)
+        if self.ev_deck_mode.get() == "Fresh Deck":
+            return
+
         rank = card.rank
         if rank in ['2', '3', '4', '5', '6']:
             self.running_count += 1
