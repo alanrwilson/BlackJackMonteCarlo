@@ -2057,13 +2057,18 @@ class BlackjackMonteCarloGUI:
                     player_hands = sorted(sorted_data[dealer_upcard].keys(), key=hand_sort_key)
 
                     for player_hand in player_hands:
+                        # Find the best action (highest EV) for this hand combination
+                        actions_data = sorted_data[dealer_upcard][player_hand]
+                        best_action = max(actions_data.keys(), key=lambda a: actions_data[a]['ev'])
+
                         for action in ['HIT', 'STAND', 'DOUBLE', 'SPLIT']:
-                            if action in sorted_data[dealer_upcard][player_hand]:
-                                data = sorted_data[dealer_upcard][player_hand][action]
+                            if action in actions_data:
+                                data = actions_data[action]
+                                action_display = f"{action}*" if action == best_action else action
                                 writer.writerow([
                                     player_hand,
                                     dealer_upcard,
-                                    action,
+                                    action_display,
                                     f"{data['ev']:.2f}",
                                     data['wins'],
                                     data['losses'],
