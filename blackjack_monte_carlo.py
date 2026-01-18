@@ -404,7 +404,7 @@ class BlackjackMonteCarloGUI:
         self.set_window_icon()
 
         # Game state
-        self.deck = Deck(num_decks=1)
+        self.deck = Deck(num_decks=4)
         self.dealer_hand = Hand()
         self.player_hands = [Hand()]
         self.current_hand_index = 0
@@ -442,6 +442,8 @@ class BlackjackMonteCarloGUI:
         self.auto_sim_losses = 0
         self.auto_sim_pushes = 0
         self.auto_sim_starting_chips = 0
+        self.auto_sim_start_time = None
+        self.auto_sim_timer_id = None
 
         # EV tracking: {(player_total, dealer_upcard, action): [outcomes]}
         self.auto_sim_ev_data = {}
@@ -619,6 +621,11 @@ class BlackjackMonteCarloGUI:
         status_frame = tk.Frame(game_frame, bg='#1a4d2e')
         status_frame.pack(pady=5, fill=tk.BOTH, expand=True)
 
+        # Current bet display
+        self.current_bet_label = tk.Label(status_frame, text="Current Bet: $0",
+                                         font=('Arial', 11, 'bold'), bg='#1a4d2e', fg='#FFD700')
+        self.current_bet_label.pack(pady=2)
+
         self.status_label = tk.Label(status_frame, text="Place your bet to start!",
                                     font=('Arial', 12, 'bold'), bg='#1a4d2e', fg='yellow',
                                     wraplength=500, justify=tk.CENTER)
@@ -649,7 +656,7 @@ class BlackjackMonteCarloGUI:
         self.split_button.pack(side=tk.LEFT, padx=4)
 
         # Monte Carlo Stats Panel
-        tk.Label(stats_frame, text="Monte Carlo Analysis", font=('Arial', 16, 'bold'),
+        tk.Label(stats_frame, text="Simulation & Betting", font=('Arial', 16, 'bold'),
                 bg='#1a4d2e', fg='white').pack(pady=5)
 
         # Chips and betting section
@@ -679,6 +686,9 @@ class BlackjackMonteCarloGUI:
                           borderwidth=1, padx=1, pady=2)
             btn.pack(side=tk.LEFT, padx=1)
 
+        # Separator
+        tk.Frame(stats_frame, bg='gold', height=2).pack(fill=tk.X, padx=10, pady=5)
+
         # Simulation settings - using grid for perfect alignment
         settings_frame = tk.Frame(stats_frame, bg='#1a4d2e')
         settings_frame.pack(pady=3, padx=10, fill=tk.X)
@@ -686,7 +696,7 @@ class BlackjackMonteCarloGUI:
         row = 0
 
         # Simulations
-        tk.Label(settings_frame, text="Simulations:", font=('Arial', 9, 'bold'),
+        tk.Label(settings_frame, text="Simulations/Hand:", font=('Arial', 9, 'bold'),
                 bg='#1a4d2e', fg='white', anchor='w').grid(row=row, column=0, sticky='w', padx=(0, 5), pady=2)
 
         sim_values = [0, 1000, 5000, 10000, 50000, 100000]
@@ -702,7 +712,7 @@ class BlackjackMonteCarloGUI:
                 bg='#1a4d2e', fg='white', anchor='w').grid(row=row, column=0, sticky='w',
                                                             padx=(0, 5), pady=2)
 
-        self.ev_deck_mode = tk.StringVar(value="Fresh Deck")
+        self.ev_deck_mode = tk.StringVar(value="Depleting Shoe")
         deck_mode_values = ["Fresh Deck", "Depleting Shoe"]
         deck_mode_dropdown = ttk.Combobox(settings_frame, textvariable=self.ev_deck_mode,
                                          values=deck_mode_values, state='readonly', width=10)
@@ -771,6 +781,9 @@ class BlackjackMonteCarloGUI:
                                       values=player_second_card_values, state='readonly', width=10)
         player_second_dropdown.grid(row=row, column=1, sticky='w', pady=2)
 
+        # Separator
+        tk.Frame(stats_frame, bg='gold', height=2).pack(fill=tk.X, padx=10, pady=5)
+
         # Auto-Simulator section
         auto_sim_frame = tk.Frame(stats_frame, bg='#1a4d2e')
         auto_sim_frame.pack(pady=5, padx=10, fill=tk.BOTH, expand=True)
@@ -833,8 +846,12 @@ class BlackjackMonteCarloGUI:
                                         anchor='n', wraplength=410)
         self.sim_stats_label.pack(pady=0, fill=tk.X)
 
-        # Left sidebar - Card Analysis
-        tk.Label(left_stats_frame, text="Card Analysis", font=('Arial', 18, 'bold'),
+        self.sim_timer_label = tk.Label(stats_display_frame, text="",
+                                        font=('Arial', 9), bg='#1a4d2e', fg='#00BFFF')
+        self.sim_timer_label.pack(pady=(2, 0))
+
+        # Left sidebar - Card Counting & Strategy
+        tk.Label(left_stats_frame, text="Card Counting & Strategy", font=('Arial', 16, 'bold'),
                 bg='#1a4d2e', fg='white').pack(pady=(5,3))
 
         # Deck Settings Frame
@@ -844,7 +861,7 @@ class BlackjackMonteCarloGUI:
         tk.Label(deck_settings_frame, text="Number of Decks:", font=('Arial', 9, 'bold'),
                 bg='#1a4d2e', fg='white').grid(row=0, column=0, sticky='w', padx=5, pady=2)
 
-        self.num_decks_var = tk.IntVar(value=1)
+        self.num_decks_var = tk.IntVar(value=4)
         deck_spinbox = tk.Spinbox(deck_settings_frame, from_=1, to=8, textvariable=self.num_decks_var,
                                  width=5, state='readonly', font=('Arial', 9))
         deck_spinbox.grid(row=0, column=1, sticky='w', padx=5, pady=2)
@@ -853,8 +870,11 @@ class BlackjackMonteCarloGUI:
                                   font=('Arial', 8), bg='#0B6623', fg='white')
         apply_deck_btn.grid(row=0, column=2, sticky='w', padx=5, pady=2)
 
+        # Separator
+        tk.Frame(left_stats_frame, bg='gold', height=2).pack(fill=tk.X, padx=10, pady=5)
+
         # Card Count Display Frame
-        count_display_frame = tk.Frame(left_stats_frame, bg='#1a4d2e', relief=tk.RIDGE, borderwidth=2)
+        count_display_frame = tk.Frame(left_stats_frame, bg='#1a4d2e')
         count_display_frame.pack(fill=tk.X, padx=10, pady=3)
 
         tk.Label(count_display_frame, text="Card Counting", font=('Arial', 10, 'bold'),
@@ -890,6 +910,54 @@ class BlackjackMonteCarloGUI:
                                   font=('Arial', 8), bg='#0B6623', fg='white')
         view_cards_btn.pack(side=tk.LEFT, padx=2)
 
+        # Count adjustment controls
+        count_adjust_frame = tk.Frame(count_display_frame, bg='#1a4d2e')
+        count_adjust_frame.pack(pady=3)
+
+        tk.Label(count_adjust_frame, text="Adjust True Count:",
+                 font=('Arial', 9, 'bold'), bg='#1a4d2e', fg='gold').pack(pady=2)
+
+        # Control row
+        control_row = tk.Frame(count_adjust_frame, bg='#1a4d2e')
+        control_row.pack(pady=2)
+
+        # -1 button
+        self.count_adjust_down_btn = tk.Button(control_row, text="-1",
+                                                command=lambda: self.adjust_count_by_increment(-1),
+                                                font=('Arial', 9, 'bold'), bg='#FF5722', fg='white',
+                                                width=3, state=tk.DISABLED)
+        self.count_adjust_down_btn.pack(side=tk.LEFT, padx=2)
+
+        # Spinbox for custom increment (-10 to +10)
+        self.count_adjust_var = tk.IntVar(value=1)
+        count_spinbox = tk.Spinbox(control_row, from_=-10, to=10,
+                                   textvariable=self.count_adjust_var,
+                                   width=4, font=('Arial', 9), state='readonly')
+        count_spinbox.pack(side=tk.LEFT, padx=2)
+
+        # Apply button
+        self.count_adjust_apply_btn = tk.Button(control_row, text="Apply",
+                                                 command=lambda: self.adjust_count_by_increment(self.count_adjust_var.get()),
+                                                 font=('Arial', 8), bg='#4CAF50', fg='white',
+                                                 width=5, state=tk.DISABLED)
+        self.count_adjust_apply_btn.pack(side=tk.LEFT, padx=2)
+
+        # +1 button
+        self.count_adjust_up_btn = tk.Button(control_row, text="+1",
+                                              command=lambda: self.adjust_count_by_increment(1),
+                                              font=('Arial', 9, 'bold'), bg='#4CAF50', fg='white',
+                                              width=3, state=tk.DISABLED)
+        self.count_adjust_up_btn.pack(side=tk.LEFT, padx=2)
+
+        # Status label
+        self.count_adjust_status_label = tk.Label(count_adjust_frame, text="(Depleting Shoe mode only)",
+                                                  font=('Arial', 8, 'italic'), bg='#1a4d2e',
+                                                  fg='#CCCCCC')
+        self.count_adjust_status_label.pack(pady=1)
+
+        # Separator
+        tk.Frame(left_stats_frame, bg='gold', height=2).pack(fill=tk.X, padx=10, pady=5)
+
         # Card counting section
         card_count_frame = tk.Frame(left_stats_frame, bg='#1a4d2e')
         card_count_frame.pack(pady=3, padx=10, fill=tk.X)
@@ -914,6 +982,9 @@ class BlackjackMonteCarloGUI:
                                          font=('Arial', 9), bg='#1a4d2e', fg='#90EE90', justify=tk.LEFT,
                                          anchor='w', wraplength=200)
         self.safe_ranks_label.pack(pady=0, padx=15, fill=tk.X)
+
+        # Separator
+        tk.Frame(left_stats_frame, bg='gold', height=2).pack(fill=tk.X, padx=10, pady=5)
 
         # Expected Value Display
         ev_frame = tk.Frame(left_stats_frame, bg='#1a4d2e')
@@ -950,8 +1021,8 @@ class BlackjackMonteCarloGUI:
 
         # Best action recommendation
         self.best_action_label = tk.Label(ev_frame, text="", font=('Arial', 12, 'bold'),
-                                         bg='#1a4d2e', fg='yellow', wraplength=220)
-        self.best_action_label.pack(pady=5)
+                                         bg='#1a4d2e', fg='yellow')
+        self.best_action_label.pack()
 
         # Calculate EV button
         self.calc_ev_button = tk.Button(ev_frame, text="Calculate EV", font=('Arial', 11, 'bold'),
@@ -1138,7 +1209,7 @@ class BlackjackMonteCarloGUI:
             # Disable and grey out EV labels
             for label in self.ev_labels.values():
                 label.config(fg='#666666', text="Disabled")
-            self.best_action_label.config(fg='#666666', text="EV Disabled\n(0 simulations)")
+            self.best_action_label.config(fg='#666666', text="EV Disabled (0 simulations)")
             self.calc_ev_button.config(state=tk.DISABLED)
         else:
             # Re-enable EV labels
@@ -1173,6 +1244,21 @@ class BlackjackMonteCarloGUI:
             self.status_label.config(text=f"EV mode: Depleting Shoe (uses {self.deck.num_decks}-deck shoe state)")
         else:
             self.status_label.config(text="EV mode: Fresh Deck (basic strategy)")
+
+        # Enable/disable count adjustment controls
+        if use_depleting and not self.game_in_progress:
+            self.count_adjust_down_btn.config(state=tk.NORMAL)
+            self.count_adjust_apply_btn.config(state=tk.NORMAL)
+            self.count_adjust_up_btn.config(state=tk.NORMAL)
+            self.count_adjust_status_label.config(text="Ready", fg='#4CAF50')
+        else:
+            self.count_adjust_down_btn.config(state=tk.DISABLED)
+            self.count_adjust_apply_btn.config(state=tk.DISABLED)
+            self.count_adjust_up_btn.config(state=tk.DISABLED)
+            if not use_depleting:
+                self.count_adjust_status_label.config(text="(Depleting Shoe mode only)", fg='#CCCCCC')
+            else:
+                self.count_adjust_status_label.config(text="(Not during game)", fg='#CCCCCC')
 
         # Auto-recalculate if game in progress
         if self.game_in_progress and self.show_ev.get() and self.num_simulations > 0:
@@ -1267,11 +1353,15 @@ class BlackjackMonteCarloGUI:
         self.auto_sim_pushes = 0
         self.auto_sim_starting_chips = self.chips
         self.auto_sim_ev_data = {}  # Reset EV tracking
+        self.auto_sim_start_time = datetime.now()
 
         # Update UI
         self.start_sim_button.config(state=tk.DISABLED)
         self.stop_sim_button.config(state=tk.NORMAL)
         self.deal_button.config(state=tk.DISABLED)
+
+        # Start the timer display
+        self.update_sim_timer()
 
         # Start the simulation loop
         self.play_auto_hand()
@@ -1284,6 +1374,36 @@ class BlackjackMonteCarloGUI:
         self.deal_button.config(state=tk.NORMAL)
         self.sim_progress_label.config(text="Stopped")
 
+        # Stop the timer
+        if self.auto_sim_timer_id:
+            self.root.after_cancel(self.auto_sim_timer_id)
+            self.auto_sim_timer_id = None
+
+        # Display final elapsed time
+        if self.auto_sim_start_time:
+            elapsed = datetime.now() - self.auto_sim_start_time
+            self.sim_timer_label.config(text=f"Time: {self.format_elapsed_time(elapsed)}")
+
+    def update_sim_timer(self):
+        """Update the timer display during auto-simulation"""
+        if self.auto_sim_running and self.auto_sim_start_time:
+            elapsed = datetime.now() - self.auto_sim_start_time
+            self.sim_timer_label.config(text=f"Time: {self.format_elapsed_time(elapsed)}")
+            # Schedule next update in 100ms for smooth display
+            self.auto_sim_timer_id = self.root.after(100, self.update_sim_timer)
+
+    def format_elapsed_time(self, elapsed):
+        """Format timedelta as MM:SS.s or HH:MM:SS"""
+        total_seconds = elapsed.total_seconds()
+        hours = int(total_seconds // 3600)
+        minutes = int((total_seconds % 3600) // 60)
+        seconds = total_seconds % 60
+
+        if hours > 0:
+            return f"{hours}:{minutes:02d}:{seconds:05.2f}"
+        else:
+            return f"{minutes}:{seconds:05.2f}"
+
     def play_auto_hand(self):
         """Play one hand automatically using basic strategy"""
         if not self.auto_sim_running or self.auto_sim_hands_played >= self.auto_sim_hands_to_play:
@@ -1293,15 +1413,23 @@ class BlackjackMonteCarloGUI:
             self.stop_sim_button.config(state=tk.DISABLED)
             self.deal_button.config(state=tk.NORMAL)
 
+            # Stop the timer
+            if self.auto_sim_timer_id:
+                self.root.after_cancel(self.auto_sim_timer_id)
+                self.auto_sim_timer_id = None
+
+            # Display final elapsed time
+            if self.auto_sim_start_time:
+                elapsed = datetime.now() - self.auto_sim_start_time
+                self.sim_timer_label.config(text=f"Time: {self.format_elapsed_time(elapsed)}")
+
             chip_change = self.chips - self.auto_sim_starting_chips
             win_rate = (self.auto_sim_wins / self.auto_sim_hands_played * 100) if self.auto_sim_hands_played > 0 else 0
 
             self.sim_progress_label.config(text="Complete!")
             self.sim_stats_label.config(
-                text=f"Final: {self.auto_sim_hands_played} hands\n"
-                     f"W: {self.auto_sim_wins} L: {self.auto_sim_losses} P: {self.auto_sim_pushes}\n"
-                     f"Win Rate: {win_rate:.1f}%\n"
-                     f"Chips: {chip_change:+d}")
+                text=f"Final: {self.auto_sim_hands_played} hands | W: {self.auto_sim_wins} L: {self.auto_sim_losses} P: {self.auto_sim_pushes}\n"
+                     f"Win Rate: {win_rate:.1f}% | Chips: {chip_change:+d}")
 
             # Enable View EV Results button if we have data
             if self.auto_sim_ev_data:
@@ -1322,6 +1450,7 @@ class BlackjackMonteCarloGUI:
         # Deal a hand
         self.current_bet = bet_amount
         self.chips -= bet_amount
+        self.current_bet_label.config(text=f"Current Bet: ${self.current_bet}")
 
         # Check if reshuffle needed
         # In Fresh Deck mode, reshuffle after every hand (simulate infinite deck)
@@ -1338,6 +1467,13 @@ class BlackjackMonteCarloGUI:
         self.game_in_progress = True
         self.dealer_hidden = True
         self.has_split = False
+
+        # Disable count adjustment buttons during game
+        if hasattr(self, 'count_adjust_down_btn'):
+            self.count_adjust_down_btn.config(state=tk.DISABLED)
+            self.count_adjust_apply_btn.config(state=tk.DISABLED)
+            self.count_adjust_up_btn.config(state=tk.DISABLED)
+            self.count_adjust_status_label.config(text="(Not during game)", fg='#CCCCCC')
 
         # Deal cards with filter applied
         if not self.deal_hand_with_filters():
@@ -1533,6 +1669,7 @@ class BlackjackMonteCarloGUI:
             if self.chips >= self.current_bet:
                 self.chips -= self.current_bet
                 self.current_bet *= 2
+                self.current_bet_label.config(text=f"Current Bet: ${self.current_bet}")
             card = self.deck.deal()
             self.update_count(card)
             current_hand.add_card(card)
@@ -1653,8 +1790,7 @@ class BlackjackMonteCarloGUI:
 
             self.sim_stats_label.config(
                 text=f"W: {self.auto_sim_wins} L: {self.auto_sim_losses} P: {self.auto_sim_pushes}\n"
-                     f"Win Rate: {win_rate:.1f}%\n"
-                     f"Chips: {chip_change:+d}")
+                     f"Win Rate: {win_rate:.1f}% | Chips: {chip_change:+d}")
 
     def show_ev_results(self):
         """Display EV results in a new window"""
@@ -1665,7 +1801,7 @@ class BlackjackMonteCarloGUI:
         # Create new window
         results_window = tk.Toplevel(self.root)
         results_window.title("Auto-Simulator EV Results")
-        results_window.geometry("1400x750")
+        results_window.geometry("930x750")
         results_window.configure(bg='#0B6623')
 
         # Title
@@ -1677,7 +1813,7 @@ class BlackjackMonteCarloGUI:
         filter_summary_frame.pack(pady=5, padx=10, fill=tk.X)
 
         # Filter row
-        filter_row = tk.Frame(filter_summary_frame, bg='#1a4d2e')
+        filter_row = tk.Frame(filter_summary_frame, bg='#1a4d2e', highlightthickness=0)
         filter_row.pack(pady=5, padx=10)
 
         tk.Label(filter_row, text="Filter by Dealer Card:", font=('Arial', 11, 'bold'),
@@ -1696,13 +1832,13 @@ class BlackjackMonteCarloGUI:
         summary_label.pack(pady=5)
 
         # Create frame with scrollbar
-        main_frame = tk.Frame(results_window, bg='#0B6623')
+        main_frame = tk.Frame(results_window, bg='#0B6623', highlightthickness=0)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         # Add canvas for scrolling
-        canvas = tk.Canvas(main_frame, bg='#0B6623')
+        canvas = tk.Canvas(main_frame, bg='#0B6623', highlightthickness=0)
         scrollbar = tk.Scrollbar(main_frame, orient=tk.VERTICAL, command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas, bg='#0B6623')
+        scrollable_frame = tk.Frame(canvas, bg='#0B6623', highlightthickness=0)
 
         scrollable_frame.bind(
             "<Configure>",
@@ -1761,7 +1897,7 @@ class BlackjackMonteCarloGUI:
                         bg='#1a4d2e', fg='#FFD700').pack(pady=8)
 
                 # Table header
-                header_frame = tk.Frame(dealer_frame, bg='#0B6623')
+                header_frame = tk.Frame(dealer_frame, bg='#0B6623', highlightthickness=0)
                 header_frame.pack(fill=tk.X, padx=10, pady=(0, 5))
 
                 tk.Label(header_frame, text="Hand", font=('Arial', 10, 'bold'),
@@ -1799,7 +1935,7 @@ class BlackjackMonteCarloGUI:
                     actions_data = sorted_data[dealer_upcard][player_hand]
 
                     # Create row
-                    row_frame = tk.Frame(dealer_frame, bg='#1a4d2e')
+                    row_frame = tk.Frame(dealer_frame, bg='#1a4d2e', highlightthickness=0)
                     row_frame.pack(fill=tk.X, padx=10, pady=2)
 
                     # Player hand label
@@ -1841,7 +1977,7 @@ class BlackjackMonteCarloGUI:
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         # Button frame
-        button_frame = tk.Frame(results_window, bg='#0B6623')
+        button_frame = tk.Frame(results_window, bg='#0B6623', highlightthickness=0)
         button_frame.pack(pady=10)
 
         # Export button
@@ -2124,7 +2260,7 @@ class BlackjackMonteCarloGUI:
             best_action = max(valid_actions, key=valid_actions.get)
             best_ev = valid_actions[best_action]
             self.best_action_label.config(
-                text=f"Best Action:\n{best_action}\n(EV: ${best_ev:.2f})")
+                text=f"Best Action: {best_action} (EV: ${best_ev:.2f})")
 
         self.calc_ev_button.config(state=tk.NORMAL, text="Calculate EV")
         self.ev_calculation_in_progress = False
@@ -2148,6 +2284,7 @@ class BlackjackMonteCarloGUI:
 
         self.current_bet = bet
         self.chips -= bet
+        self.current_bet_label.config(text=f"Current Bet: ${self.current_bet}")
 
         # Check if reshuffle needed
         if self.deck.reshuffle_needed():
@@ -2162,6 +2299,13 @@ class BlackjackMonteCarloGUI:
         self.stand_count = 0
         self.has_split = False
 
+        # Disable count adjustment buttons during game
+        if hasattr(self, 'count_adjust_down_btn'):
+            self.count_adjust_down_btn.config(state=tk.DISABLED)
+            self.count_adjust_apply_btn.config(state=tk.DISABLED)
+            self.count_adjust_up_btn.config(state=tk.DISABLED)
+            self.count_adjust_status_label.config(text="(Not during game)", fg='#CCCCCC')
+
         # Reset EV labels
         for label in self.ev_labels.values():
             label.config(text="N/A")
@@ -2173,6 +2317,14 @@ class BlackjackMonteCarloGUI:
                                  "Could not deal a hand matching the selected filters after 1000 attempts. Try different filters.")
             self.chips += bet
             self.game_in_progress = False
+
+            # Re-enable count adjustment buttons if in Depleting Shoe mode
+            if self.ev_deck_mode.get() == "Depleting Shoe":
+                if hasattr(self, 'count_adjust_down_btn'):
+                    self.count_adjust_down_btn.config(state=tk.NORMAL)
+                    self.count_adjust_apply_btn.config(state=tk.NORMAL)
+                    self.count_adjust_up_btn.config(state=tk.NORMAL)
+                    self.count_adjust_status_label.config(text="Ready", fg='#4CAF50')
             return
 
         self.update_display()
@@ -2264,6 +2416,7 @@ class BlackjackMonteCarloGUI:
         if self.chips >= self.current_bet:
             self.chips -= self.current_bet
             self.current_bet *= 2
+            self.current_bet_label.config(text=f"Current Bet: ${self.current_bet}")
             current_hand = self.player_hands[self.current_hand_index]
             card = self.deck.deal()
             self.update_count(card)
@@ -2475,6 +2628,16 @@ class BlackjackMonteCarloGUI:
 
         self.game_in_progress = False
         self.deal_button.config(state=tk.NORMAL)
+        self.current_bet = 0
+        self.current_bet_label.config(text="Current Bet: $0")
+
+        # Re-enable count adjustment buttons if in Depleting Shoe mode
+        if self.ev_deck_mode.get() == "Depleting Shoe":
+            if hasattr(self, 'count_adjust_down_btn'):
+                self.count_adjust_down_btn.config(state=tk.NORMAL)
+                self.count_adjust_apply_btn.config(state=tk.NORMAL)
+                self.count_adjust_up_btn.config(state=tk.NORMAL)
+                self.count_adjust_status_label.config(text="Ready", fg='#4CAF50')
 
         if self.chips <= 0:
             messagebox.showinfo("Game Over", "You're out of chips! Resetting to $1000.")
@@ -2500,6 +2663,16 @@ class BlackjackMonteCarloGUI:
         self.double_button.config(state=tk.DISABLED)
         self.split_button.config(state=tk.DISABLED)
         self.calc_ev_button.config(state=tk.DISABLED)
+        self.current_bet = 0
+        self.current_bet_label.config(text="Current Bet: $0")
+
+        # Re-enable count adjustment buttons if in Depleting Shoe mode
+        if self.ev_deck_mode.get() == "Depleting Shoe":
+            if hasattr(self, 'count_adjust_down_btn'):
+                self.count_adjust_down_btn.config(state=tk.NORMAL)
+                self.count_adjust_apply_btn.config(state=tk.NORMAL)
+                self.count_adjust_up_btn.config(state=tk.NORMAL)
+                self.count_adjust_status_label.config(text="Ready", fg='#4CAF50')
 
         # Clear EV display
         for label in self.ev_labels.values():
@@ -2639,6 +2812,173 @@ class BlackjackMonteCarloGUI:
         self.running_count_label.config(fg=count_color)
         self.true_count_label.config(fg=count_color)
 
+    def adjust_count_by_increment(self, increment):
+        """Adjust the deck composition to change true count by specified increment
+
+        Args:
+            increment: Desired change in true count (positive or negative)
+        """
+        # === VALIDATION PHASE ===
+
+        # Check mode
+        if self.ev_deck_mode.get() != "Depleting Shoe":
+            messagebox.showwarning("Invalid Mode",
+                                  "Count adjustment only available in Depleting Shoe mode.")
+            return
+
+        # Check game state
+        if self.game_in_progress:
+            messagebox.showwarning("Game in Progress",
+                                  "Cannot adjust count during an active game.")
+            return
+
+        # Check for zero increment
+        if increment == 0:
+            self.count_adjust_status_label.config(text="No change requested", fg='yellow')
+            return
+
+        # Check if deck has cards
+        if len(self.deck.cards) == 0:
+            messagebox.showerror("Empty Deck", "Deck is empty. Reshuffle needed.")
+            return
+
+        # === CALCULATION PHASE ===
+
+        # Calculate current and target counts
+        current_true_count = self.get_true_count()
+        target_true_count = current_true_count + increment
+
+        # Calculate decks remaining
+        decks_remaining = self.deck.get_decks_remaining()
+        if decks_remaining < 0.1:  # Less than ~5 cards
+            messagebox.showwarning("Too Few Cards",
+                                  "Not enough cards remaining to adjust count reliably.")
+            return
+
+        # Calculate target running count
+        current_running_count = self.running_count
+        target_running_count = round(target_true_count * decks_remaining)
+        running_count_change_needed = target_running_count - current_running_count
+
+        # === CARD SELECTION STRATEGY ===
+
+        # Count available cards by Hi-Lo category
+        low_cards = []   # 2-6 (count value: +1 each)
+        high_cards = []  # 10/J/Q/K/A (count value: -1 each)
+
+        for card in self.deck.cards:
+            if card.rank in ['2', '3', '4', '5', '6']:
+                low_cards.append(card)
+            elif card.rank in ['10', 'J', 'Q', 'K', 'A']:
+                high_cards.append(card)
+
+        # Determine action based on needed running count change
+        cards_to_remove = []
+        cards_to_add = []
+
+        if running_count_change_needed > 0:
+            # INCREASE count: Remove low cards first, then add high cards
+            num_to_remove = min(abs(running_count_change_needed), len(low_cards))
+            cards_to_remove = random.sample(low_cards, num_to_remove)
+
+            # If not enough low cards to remove, add high cards
+            remaining_change = running_count_change_needed - num_to_remove
+            if remaining_change > 0:
+                num_to_add = min(remaining_change, 10)  # Limit to prevent unrealistic decks
+                for i in range(num_to_add):
+                    # Add high cards with suit distribution
+                    suit = Card.SUITS[i % 4]
+                    rank = random.choice(['10', 'J', 'Q', 'K', 'A'])
+                    cards_to_add.append(Card(suit, rank))
+
+        elif running_count_change_needed < 0:
+            # DECREASE count: Remove high cards first, then add low cards
+            num_to_remove = min(abs(running_count_change_needed), len(high_cards))
+            cards_to_remove = random.sample(high_cards, num_to_remove)
+
+            # If not enough high cards to remove, add low cards
+            remaining_change = abs(running_count_change_needed) - num_to_remove
+            if remaining_change > 0:
+                num_to_add = min(remaining_change, 10)  # Limit additions
+                for i in range(num_to_add):
+                    suit = Card.SUITS[i % 4]
+                    rank = random.choice(['2', '3', '4', '5', '6'])
+                    cards_to_add.append(Card(suit, rank))
+
+        # === VALIDATION OF CHANGES ===
+
+        # Check if adjustment is achievable
+        if len(cards_to_remove) == 0 and len(cards_to_add) == 0:
+            messagebox.showinfo("No Change", "Target count already achieved or not achievable.")
+            return
+
+        # Warn if adding too many cards (unrealistic)
+        if len(cards_to_add) > 5:
+            response = messagebox.askyesno("Unrealistic Adjustment",
+                                           f"This will add {len(cards_to_add)} cards to the shoe.\n"
+                                           f"This is unrealistic for actual card counting.\n"
+                                           f"Continue anyway?")
+            if not response:
+                return
+
+        # === APPLY CHANGES ===
+
+        # Remove cards from deck
+        for card in cards_to_remove:
+            for i, deck_card in enumerate(self.deck.cards):
+                if deck_card.suit == card.suit and deck_card.rank == card.rank:
+                    self.deck.cards.pop(i)
+                    break
+
+        # Add cards to deck
+        self.deck.cards.extend(cards_to_add)
+
+        # Shuffle to integrate new cards
+        if len(cards_to_add) > 0:
+            self.deck.shuffle()
+
+        # === UPDATE RUNNING COUNT ===
+
+        # Adjust running count based on what was removed/added
+        for card in cards_to_remove:
+            # REMOVE card = simulate it was dealt, so update count as if we saw it
+            if card.rank in ['2', '3', '4', '5', '6']:
+                self.running_count += 1  # Low card dealt = count increases
+            elif card.rank in ['10', 'J', 'Q', 'K', 'A']:
+                self.running_count -= 1  # High card dealt = count decreases
+
+        for card in cards_to_add:
+            # ADD card = reverse a dealt card, so reverse the count effect
+            if card.rank in ['2', '3', '4', '5', '6']:
+                self.running_count -= 1  # Undo low card count
+            elif card.rank in ['10', 'J', 'Q', 'K', 'A']:
+                self.running_count += 1  # Undo high card count
+
+        # === UPDATE UI ===
+
+        # Update count display
+        self.update_count_display()
+
+        # Update card analysis if method exists
+        if hasattr(self, 'calculate_card_counts'):
+            self.calculate_card_counts()
+
+        # Update status label
+        new_true_count = self.get_true_count()
+        actual_change = new_true_count - current_true_count
+
+        status_msg = f"Count adjusted: {current_true_count:+.1f} → {new_true_count:+.1f} "
+        status_msg += f"({len(cards_to_remove)} cards removed)"
+        self.count_adjust_status_label.config(text=status_msg, fg='#4CAF50')
+
+        # Show messagebox confirmation
+        details = f"True Count: {current_true_count:+.1f} → {new_true_count:+.1f}\n"
+        details += f"Running Count: {current_running_count:+d} → {self.running_count:+d}\n"
+        details += f"Cards Removed: {len(cards_to_remove)}\n"
+        details += f"Cards Remaining: {len(self.deck.cards)}"
+
+        messagebox.showinfo("Count Adjusted", details)
+
     def reshuffle_shoe(self):
         """Reshuffle the shoe and reset count"""
         self.deck.build()
@@ -2658,6 +2998,13 @@ class BlackjackMonteCarloGUI:
         self.update_count_display()
         self.status_label.config(text=f"Deck reset to {num_decks} deck(s)!")
 
+        # Reset count adjustment status
+        if hasattr(self, 'count_adjust_status_label'):
+            if self.ev_deck_mode.get() == "Depleting Shoe":
+                self.count_adjust_status_label.config(text="Ready", fg='#4CAF50')
+            else:
+                self.count_adjust_status_label.config(text="(Depleting Shoe mode only)", fg='#CCCCCC')
+
     def manual_reshuffle(self):
         """Manually reshuffle the shoe"""
         if self.game_in_progress:
@@ -2665,6 +3012,13 @@ class BlackjackMonteCarloGUI:
             return
 
         self.reshuffle_shoe()
+
+        # Reset count adjustment status
+        if hasattr(self, 'count_adjust_status_label'):
+            if self.ev_deck_mode.get() == "Depleting Shoe":
+                self.count_adjust_status_label.config(text="Ready", fg='#4CAF50')
+            else:
+                self.count_adjust_status_label.config(text="(Depleting Shoe mode only)", fg='#CCCCCC')
 
     def show_remaining_cards(self):
         """Show all remaining cards in the deck in a new window"""
